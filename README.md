@@ -4,7 +4,7 @@
 
 ## Overview
 
-FrameFlow is an early portfolio project for learning how an AI-oriented product is assembled. The current app collects a prompt and creative settings, sends them to a FastAPI endpoint, and displays a rule-based sequence of scenes. It does **not** render a finished video yet.
+FrameFlow is  for learning how an AI-oriented product is assembled. The current app collects a prompt and creative settings, sends them to a FastAPI endpoint, and displays a rule-based sequence of scenes. It does **not** render a finished video yet.
 
 ## Motivation
 
