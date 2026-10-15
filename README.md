@@ -1,39 +1,28 @@
 # FrameFlow AI
 
-**From first thought to next frame.** FrameFlow AI is a learning-focused creative studio that turns a text prompt into a structured storyboard preview.
+**From first thought to next frame.** FrameFlow AI is a creative studio that turns a text prompt into an intelligent storyboard and renders a fully narrated MP4 video preview.
 
 ## Overview
 
-FrameFlow is  for learning how an AI-oriented product is assembled. The current app collects a prompt and creative settings, sends them to a FastAPI endpoint, and displays a rule-based sequence of scenes. It does **not** render a finished video yet.
-
-## Motivation
-
-Turning a blank page into a coherent video plan can be difficult. A storyboard is a useful first step: it makes the subject, pacing, and visual beats concrete before more advanced generation tools are introduced.
+FrameFlow provides an end-to-end creative workflow. The app collects a prompt and creative settings, generates style-tailored scene beats with voiceover scripts, renders motion visual cards, synthesizes spoken narration, and compiles an MP4 video with in-browser playback and downloads.
 
 ## Current features
 
 - Dark, responsive creative studio interface with FrameFlow branding.
-- Prompt editor with validation and helpful empty, loading, success, and error states.
+- Prompt editor with validation and clear empty, loading, success, and error states.
 - Educational, Cartoon, Cinematic, Story, and Nursery Rhyme style choices.
-- 15, 30, and 60 second duration choices.
-- 16:9, 9:16, and 1:1 canvas choices.
-- React request to `POST http://127.0.0.1:8000/api/storyboard`.
-- Rule-based storyboard generation with numbered scenes and balanced durations.
-
-## Planned roadmap
-
-The following are intentionally **planned**, not implemented:
-
-1. Genuine AI scene planning using a model provider selected later.
-2. AI-generated visual references for each scene.
-3. Narration, music, and caption planning.
-4. Rendered video output and export.
-5. Saved projects, authentication, and collaborative editing.
+- 15, 30, and 60 second duration choices with adaptive scene splitting.
+- 16:9, 9:16, and 1:1 canvas aspect ratio choices.
+- Style-specific voiceover narration generation (using Microsoft Edge Neural Voices).
+- Asynchronous video rendering pipeline powered by Pillow, imageio, and FFmpeg.
+- Real-time progress bar tracking voiceover synthesis, frame rendering, and MP4 assembly.
+- In-browser HTML5 video player and direct MP4 file download.
+- Dynamic backend URL configuration via `.env`.
 
 ## Technology stack
 
 - Frontend: React 18, Vite, JavaScript, CSS, Lucide React icons.
-- Backend: Python, FastAPI, Pydantic, Uvicorn.
+- Backend: Python, FastAPI, Pydantic, Uvicorn, Pillow, imageio-ffmpeg, edge-tts.
 - Communication: JSON over HTTP with CORS enabled for the local Vite server.
 
 ## Architecture
@@ -41,12 +30,14 @@ The following are intentionally **planned**, not implemented:
 ```text
 Browser (React + Vite)
         |
-        | POST /api/storyboard
+        | POST /api/storyboard   ---> Generates scene beats & voiceover narration
+        | POST /api/render-video ---> Triggers async video compilation job
+        | GET  /api/video-status ---> Polls real-time progress (0% - 100%)
+        | GET  /api/video/{id}   ---> Streams and downloads MP4 video
         v
-FastAPI (rule-based storyboard service)
-        |
-        v
-JSON response: settings + scenes
+FastAPI Backend
+ ├── video_generator.py (Pillow frame generator + edge-tts audio + FFmpeg stitcher)
+ └── generated_videos/  (Rendered MP4 artifacts)
 ```
 
 ## Project structure
@@ -55,12 +46,15 @@ JSON response: settings + scenes
 FrameFlow-AI/
 ├── backend/
 │   ├── main.py
-│   └── requirements.txt
+│   ├── video_generator.py
+│   ├── requirements.txt
+│   └── generated_videos/
 ├── frontend/
 │   ├── src/
 │   │   ├── App.jsx
 │   │   ├── main.jsx
 │   │   └── styles.css
+│   ├── .env
 │   ├── index.html
 │   ├── package.json
 │   └── vite.config.js
