@@ -61,6 +61,9 @@ select { padding: 0 12px; outline: none; }
 .notice.success { color: #8ce2c1; border: 1px solid #276751; background: #123d3255; }
 .scene-narration { display: flex; align-items: flex-start; gap: 7px; margin-top: 10px; padding: 8px 12px; border-radius: 8px; border: 1px solid #363060; background: #0c0e25; color: #fde68a; font-size: 11px; line-height: 1.5; font-style: italic; }
 .scene-narration svg { flex-shrink: 0; margin-top: 2px; color: #fbbf24; }
+.motion-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 6px; font-size: 10px; font-family: "DM Mono", monospace; font-weight: 600; color: #f472b6; background: #3b133866; border: 1px solid #701a5b; margin-top: 6px; }
+.scene-motion-instruction { display: flex; align-items: flex-start; gap: 7px; margin-top: 8px; padding: 7px 11px; border-radius: 8px; border: 1px solid #2e3a5a; background: #0a1126; color: #93c5fd; font-size: 11px; line-height: 1.5; }
+.scene-motion-instruction svg { flex-shrink: 0; margin-top: 2px; color: #60a5fa; }
 .render-action-bar { display: flex; flex-direction: column; gap: 14px; margin-top: 18px; padding: 18px; border: 1px solid #3d3580; border-radius: 14px; background: linear-gradient(135deg, #18193fcc, #10122acc); }
 .render-action-bar .bar-title { display: flex; justify-content: space-between; align-items: center; }
 .render-action-bar h4 { margin: 0; font-size: 14px; color: #fff; display: flex; align-items: center; gap: 8px; }

@@ -221,7 +221,18 @@ function App() {
                       <h3>{scene.title}</h3>
                       <span><Clock3 size={13} /> {scene.duration}s</span>
                     </div>
+                    {scene.character_action && (
+                      <span className="motion-badge">
+                        <Play size={10} fill="currentColor" /> {scene.character_action}
+                      </span>
+                    )}
                     <p>{scene.description}</p>
+                    {scene.motion_instruction && (
+                      <div className="scene-motion-instruction">
+                        <Sparkles size={13} />
+                        <span><strong>Motion:</strong> {scene.motion_instruction}</span>
+                      </div>
+                    )}
                     {scene.narration && (
                       <div className="scene-narration">
                         <Volume2 size={13} />
@@ -236,12 +247,12 @@ function App() {
               {videoStatus === "idle" && (
                 <div className="render-action-bar">
                   <div className="bar-title">
-                    <h4><Video size={16} /> Ready to render video?</h4>
+                    <h4><Video size={16} /> Ready to generate animated video?</h4>
                     <span className="beta-pill">{duration}s • {aspectRatio}</span>
                   </div>
-                  <p>Compile these scenes into an MP4 video with custom visual motion cards and synchronized voiceover narration.</p>
+                  <p>Renders a 2D animated video with consistent character design, swaying, parabolic hopping with squash & stretch, 360° pirouette spins, and synchronized narration.</p>
                   <button type="button" className="btn-render-video" onClick={startRenderVideo}>
-                    <Play size={16} fill="currentColor" /> Render Narrated Video (.mp4)
+                    <Play size={16} fill="currentColor" /> Generate Animated Video (.mp4)
                   </button>
                 </div>
               )}

@@ -297,6 +297,8 @@ async def render_video_job(
         scene_video_files = []
         total_scenes = len(scenes)
 
+        from backend.animation_engine import parse_prompt_entities, create_character_sprite, render_animated_frame
+
         if progress_callback:
             await progress_callback(10, "Synthesizing voiceover narration for scenes...")
 
@@ -318,12 +320,21 @@ async def render_video_job(
 
         total_video_duration = sum(scene_durations)
 
-        # Step 2: Render video frames for each scene
+        # Step 2: Generate character design and animated scene frames
+        if progress_callback:
+            await progress_callback(20, "Generating animated character design and environment assets...")
+
+        entities = parse_prompt_entities(prompt)
+        sprite_size = int(min(width, height) * 0.42)
+        character_sprite = create_character_sprite(entities, size=sprite_size)
+
+        fps = 15
+
         elapsed_video_time = 0.0
         for idx, scene in enumerate(scenes):
             scene_title = scene.title if hasattr(scene, "title") else scene.get("title", f"Scene {idx+1}")
             scene_desc = scene.description if hasattr(scene, "description") else scene.get("description", "")
-            narration_text = getattr(scene, "narration", None) or (scene.get("narration") if isinstance(scene, dict) else scene_desc)
+            motion_type = getattr(scene, "motion_type", None) or (scene.get("motion_type") if isinstance(scene, dict) else "sway_and_bob")
             scene_dur = scene_durations[idx]
             total_frames = int(scene_dur * fps)
 
@@ -331,20 +342,19 @@ async def render_video_job(
             writer = imageio.get_writer(temp_scene_video, fps=fps, codec="libx264", pixelformat="yuv420p")
 
             for f in range(total_frames):
-                current_time = elapsed_video_time + (f / fps)
-                overall_progress = current_time / max(1.0, total_video_duration)
-                frame_img = render_scene_frame(
+                frame_img = render_animated_frame(
                     width=width,
                     height=height,
-                    style=style,
+                    character_sprite=character_sprite,
+                    entities=entities,
                     scene_number=idx + 1,
                     total_scenes=total_scenes,
-                    title=scene_title,
-                    description=scene_desc,
-                    narration=narration_text,
-                    frame_index=f,
+                    scene_title=scene_title,
+                    scene_description=scene_desc,
+                    motion_type=motion_type,
+                    frame_idx=f,
                     total_frames_in_scene=total_frames,
-                    overall_progress=overall_progress,
+                    fps=fps,
                 )
                 import numpy as np
                 writer.append_data(np.array(frame_img))

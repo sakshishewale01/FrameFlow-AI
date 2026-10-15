@@ -28,6 +28,9 @@ class Scene(BaseModel):
     description: str
     duration: int
     narration: str = ""
+    motion_type: str = "sway_and_bob"
+    character_action: str = ""
+    motion_instruction: str = ""
 
 
 class StoryboardResponse(BaseModel):
@@ -56,7 +59,7 @@ class VideoStatusResponse(BaseModel):
     error: Optional[str] = None
 
 
-app = FastAPI(title="FrameFlow AI API", version="0.2.0")
+app = FastAPI(title="FrameFlow AI API", version="0.3.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -76,42 +79,51 @@ def build_scenes(request: StoryboardRequest) -> list[Scene]:
     remainder = request.duration - (base_duration * scene_count)
     prompt_clean = request.prompt.strip()
 
+    # Choreography mapping for true animated video
+    motion_profiles = [
+        ("sway_and_bob", "Gentle Floating & Sway", "Wakes up gracefully on the magical water, gently swaying side-to-side (±15°) with floating rhythmic bobbing."),
+        ("bounce_and_hop", "High Bounce with Squash & Stretch", "Rhythmic parabolic jumps with classical squash on landing (0.74x) and stretch in air (1.28x), sending expanding water ripples across the pond."),
+        ("pirouette_spin", "360° Dance Pirouette", "Full 360-degree dance pirouette with perspective flip and centrifugal magical sparkles flying outward."),
+        ("grand_finale", "Joyful Finale Celebration", "Energetic celebratory dance with high leaps, rapid shimmy, and shimmering water reflection."),
+        ("sway_and_bob", "Encore Floating Bow", "Graceful bow on the enchanted pond under glowing starlight, settling into tranquil ripples."),
+    ]
+
     # Style-specific storytelling narratives and visual staging
     style_templates = {
         "Cinematic": [
-            ("The Awakening", f"Wide panoramic shot establishes the scene: {prompt_clean}. Soft volumetric mist and dramatic rim lighting.", f"In the stillness of the beginning, an unforgettable vision stirs: {prompt_clean}."),
-            ("The Crossing", "Medium tracking camera glides with the protagonist as tension mounts and the environment shifts.", "With every measured step forward, the world unveils mysteries long concealed."),
-            ("The Turning Point", "Intense low-angle focus, high contrast, golden embers illuminate a pivotal revelation.", "Here in the crucible of discovery, the hidden truth bursts into brilliant focus."),
-            ("The Luminous Return", "Sweeping crane pullback into the infinite horizon, triumphant amber aura and lens flare.", "Guided by the constellations of the journey, the path home shines clear and true."),
-            ("The Horizon Awaits", "Lingering cinematic silhouette under twilight stars, leaving an indelible cinematic impression.", "From first thought to next frame, the echo of wonder travels on."),
+            ("The Awakening", f"Panoramic camera reveals {prompt_clean}. Soft volumetric mist and glowing water reflections.", f"On a tranquil enchanted pond, the dance begins: {prompt_clean}."),
+            ("Catching the Rhythm", "Dynamic medium focus tracking the character as the melody gathers momentum.", "With joyful courage, the character leaps into the rhythm, sending ripples across the water."),
+            ("The Magical Pirouette", "Close camera orbit as the character spins gracefully in mid-air.", "Spinning under the moonlight, a flurry of golden sparkles bursts into the night sky."),
+            ("The Grand Celebration", "Sweeping crane pullback revealing the full radiant dance on the illuminated pond.", "The water sings in harmony as the final dance reaches its triumphant crescendo."),
+            ("Lingering Starlight", "Twilight silhouette on the glowing water, echoing the beauty of the performance.", "From first thought to next frame, the magic of the dance lingers on."),
         ],
         "Cartoon": [
-            ("Jump into Action!", f"Vibrant color splash and zany perspective: {prompt_clean}. Bouncy energetic frame introduction.", f"Whoa, look at that! It's {prompt_clean}! Get ready for an epic adventure!"),
-            ("Up, Down, and Around!", "Fast dynamic panning shot with playful squash-and-stretch cartoon motion and bright pop accents.", "Off we go zooming through twists, turns, and hilarious surprises!"),
-            ("A Wild Twist!", "Exaggerated close-up with funny expressions and sparkles of lightning cartoon energy.", "Hold onto your hats! A totally unexpected puzzle pops right into view!"),
-            ("Victory Dance!", "Celebratory fireworks of confetti, sunny golden hues, and happy character poses.", "Hooray! Together we solved it, bringing joy and color to everyone around!"),
-            ("To the Next Fun!", "Waving goodbye with a bouncy wink to the camera and vibrant rainbow trail.", "What wild ride will we take tomorrow? Stay tuned for more fun!"),
+            ("Jump into Action!", f"Vibrant color splash: {prompt_clean}! High-energy bouncy entrance.", f"Whoa, look at that! It's {prompt_clean}! Time to dance and groove!"),
+            ("Bouncing Bonanza!", "Zany cartoon physics with exaggerated squash, stretch, and bouncy hops.", "Boing! Bouncing high into the air and splashing joyful waves everywhere!"),
+            ("Super Spin Twirl!", "Whirlwind cartoon spin with sparkling stars and comic action lines.", "Round and round we go! A dizzying, delightful 360-degree twirl!"),
+            ("Victory Hop!", "Confetti water splashes and huge cartoon smiles.", "Hooray! What an incredible dance party on the pond!"),
+            ("See Ya Next Dance!", "Happy wave and playful wink to the audience.", "Until our next great adventure, keep on moving and grooving!"),
         ],
         "Educational": [
-            ("Foundational Concept", f"Clear analytical visualization: {prompt_clean}. High-definition focal diagram with informative layout.", f"Let us examine our central premise: {prompt_clean}. Notice how the core elements interact."),
-            ("The Mechanism at Work", "Step-by-step breakdown highlighting moving components, arrows of motion, and structural clarity.", "As the process unfolds, key variables guide the reaction and drive meaningful change."),
-            ("Critical Observation", "Magnified split-frame comparison displaying before-and-after results with precision.", "At this pivotal junction, evidence confirms what theory predicted."),
-            ("Synthesized Conclusion", "Comprehensive master view connecting each data point into a unified understanding.", "By tracing every step, we uncover a repeatable blueprint for discovery."),
-            ("Practical Application", "Real-world contextual demonstration inspiring further exploration and practical mastery.", "With these principles in hand, you are ready to apply this insight anywhere."),
+            ("Introduction of Form", f"Clear focal staging observing: {prompt_clean}. Fluid mechanics and natural balance.", f"Notice the natural equilibrium of our subject: {prompt_clean} as kinetic movement begins."),
+            ("Oscillation and Rhythm", "Analytical view demonstrating harmonic bounce, energy transfer, and ripple propagation.", "As vertical force is applied, elastic deformation creates harmonic oscillation across the surface."),
+            ("Rotational Dynamics", "Demonstrating angular momentum and symmetry through a continuous 360-degree axis rotation.", "Through conservation of angular momentum, the spin maintains clean center-of-mass balance."),
+            ("Harmonic Synthesis", "Full environmental overview illustrating resonance between character and fluid surface.", "All physical forces align, creating a textbook demonstration of fluid-surface dynamics."),
+            ("Concluding Principle", "Summary perspective highlighting repeatable biomechanical principles in nature.", "A perfect fusion of organic rhythm, motion mechanics, and fluid physics."),
         ],
         "Story": [
-            ("Once Upon a Thought", f"Atmospheric storybook composition: {prompt_clean}. Warm painterly textures and gentle shadows.", f"Once upon a quiet evening, a wondrous tale unfolded: {prompt_clean}."),
-            ("Into the Deep Woods", "Winding cobblestone path illuminated by fireflies and gentle lanterns.", "A curious heart set forth into the quiet unknown, listening to the secrets of the wind."),
-            ("The Moment of Truth", "Dramatic firelight reflection revealing a choice that tests courage and kindness.", "When the shadows whispered doubt, courage flickered and sparked into flame."),
-            ("A Heartwarming Dawn", "Soft golden morning light cascades across peaceful landscapes, comforting and warm.", "At last, peace settled over the land, woven into the hearts of all who believed."),
-            ("The Story Continues", "Gentle closing of the book illustration with glowing stars fading softly into memory.", "And they remembered: every ending is simply the threshold of another great tale."),
+            ("Once Upon a Thought", f"Atmospheric storybook composition: {prompt_clean}. Gentle fireflies and moonlit waves.", f"Once upon a quiet evening, a magical dance unfolded: {prompt_clean}."),
+            ("The Rhythm Awakens", "The character finds its true groove, hopping joyfully across the water lilies.", "Every bounce told a story of courage, splashing light into the twilight pond."),
+            ("A Whirl of Magic", "Spinning gracefully as stardust swirls around the petals.", "In a breathtaking pirouette, the night seemed to stand still in wonder."),
+            ("A Heartwarming Finale", "Soft golden glow illuminates the peaceful pond as the dance concludes.", "And the pond whispered its joy, holding the memory of this enchanted moment forever."),
+            ("Goodnight Little Lotus", "Gentle closing scene under sleepy constellations.", "Sleep sweet, until the dawn sun wakes the pond again."),
         ],
         "Nursery Rhyme": [
-            ("Twinkle and Begin!", f"Playful pastel skies with floating stars and smiling clouds: {prompt_clean}.", f"Listen close, little friends! Here comes a happy song about {prompt_clean}!"),
-            ("Pitter Patter Steps", "Cheery little footprints dancing along a gentle rainbow road with soft grass.", "Tiptoe, tap-tap, happy and bright, dancing along in the sweet morning light!"),
-            ("Peek-a-boo Surprise!", "Bouncy pop-up illustration with big friendly smiles and sparkling bubbles.", "Peek-a-boo! What do we see? A marvelous surprise for you and for me!"),
-            ("Sweet Dreams and Hugs", "A cozy moon smiling down softly on warm glowing cottages with sleepy lanterns.", "Rest your head, close your eyes tight, the stars are singing goodnight, goodnight!"),
-            ("Until Tomorrow Sings", "Gentle lullaby chime with friendly critters nestled warmly together.", "Sleep sweet until the bright sun wakes the morning sky again!"),
+            ("Twinkle and Begin!", f"Playful pastel skies with floating stars: {prompt_clean}.", f"Listen close, little friends! Here comes {prompt_clean}!"),
+            ("Hop Hop Hop!", "Cheery little hops splashing along the happy rainbow ripples.", "Hop hop hop, jump up high! Tap tap tap, touching the sky!"),
+            ("Spin Around!", "Bouncy spinning fun with sparkling bubbles.", "Twirl around, spin and play, dancing all our cares away!"),
+            ("Happy Claps!", "Cheery celebration with sweet smiling stars.", "Clap your hands and shout hooray, what a happy, sunny day!"),
+            ("Sweet Dreams", "Gentle lullaby chime with sleepy moonbeams.", "Rest your head and close your eyes, under the cozy nighttime skies!"),
         ],
     }
 
@@ -123,6 +135,9 @@ def build_scenes(request: StoryboardRequest) -> list[Scene]:
             title=beats[index][0],
             description=beats[index][1],
             narration=beats[index][2],
+            motion_type=motion_profiles[index][0],
+            character_action=motion_profiles[index][1],
+            motion_instruction=motion_profiles[index][2],
             duration=base_duration + (1 if index < remainder else 0),
         )
         for index in range(scene_count)

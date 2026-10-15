@@ -1,10 +1,16 @@
 # FrameFlow AI
 
-**From first thought to next frame.** FrameFlow AI is a creative studio that turns a text prompt into an intelligent storyboard and renders a fully narrated MP4 video preview.
+**From first thought to next frame.** FrameFlow AI is an automated text-to-animated-video creative studio that turns a text prompt into an intelligent choreographed storyboard and renders an animated MP4 video with consistent characters, dynamic motion, and voiceover narration.
 
 ## Overview
 
-FrameFlow provides an end-to-end creative workflow. The app collects a prompt and creative settings, generates style-tailored scene beats with voiceover scripts, renders motion visual cards, synthesizes spoken narration, and compiles an MP4 video with in-browser playback and downloads.
+FrameFlow provides an end-to-end creative workflow:
+1. **Prompt Analysis**: Extracts character traits, colors, setting, and actions from the prompt.
+2. **Choreographed Storyboarding**: Formulates structured scene beats with visual staging, dance choreography (swaying, squash & stretch bouncing, 360° pirouettes), and voiceover scripts.
+3. **Consistent Character Design**: Generates a high-definition character sprite once, ensuring 100% visual identity consistency across every scene.
+4. **Living Environment Physics**: Renders animated water wave displacement, floating bobbing lily pads, ground contact shadows, expanding impact ripple rings, and rising glowing fireflies.
+5. **Real 2D Animation Engine**: Applies classical animation principles (squash & stretch, parabolic bounce trajectories, rotational sway, horizontal perspective flips).
+6. **MP4 Video & Audio Assembly**: Remuxes synchronized voiceover narration with the animated footage into a streaming-ready MP4 video.
 
 ## Current features
 
@@ -13,16 +19,18 @@ FrameFlow provides an end-to-end creative workflow. The app collects a prompt an
 - Educational, Cartoon, Cinematic, Story, and Nursery Rhyme style choices.
 - 15, 30, and 60 second duration choices with adaptive scene splitting.
 - 16:9, 9:16, and 1:1 canvas aspect ratio choices.
-- Style-specific voiceover narration generation (using Microsoft Edge Neural Voices).
-- Asynchronous video rendering pipeline powered by Pillow, imageio, and FFmpeg.
-- Real-time progress bar tracking voiceover synthesis, frame rendering, and MP4 assembly.
-- In-browser HTML5 video player and direct MP4 file download.
-- Dynamic backend URL configuration via `.env`.
+- **Choreographed Animation Staging**: Scene cards show distinct motion instructions (e.g. *Sway & Bob*, *Squash, Stretch & High Hopping*, *360° Dance Pirouette*, *Joyful Finale Celebration*).
+- **True 2D Character Animation**: Characters physically hop, stretch, squash, tilt, and spin rather than remaining static slides.
+- **Environment Motion**: Living water surfaces, wave oscillation, and dynamic particle systems.
+- **Consistent Character Appearance**: Character sprite is generated and maintained across all scenes.
+- **Voiceover Narration**: Free neural voiceover synthesis powered by Microsoft Edge Neural Voices.
+- **CPU-Optimized (40+ FPS)**: Renders directly on Windows with 16 GB RAM and no GPU requirements.
+- **In-browser HTML5 Video Player & Direct MP4 Download**.
 
 ## Technology stack
 
 - Frontend: React 18, Vite, JavaScript, CSS, Lucide React icons.
-- Backend: Python, FastAPI, Pydantic, Uvicorn, Pillow, imageio-ffmpeg, edge-tts.
+- Backend: Python, FastAPI, Pydantic, Uvicorn, Pillow, NumPy, imageio-ffmpeg, edge-tts.
 - Communication: JSON over HTTP with CORS enabled for the local Vite server.
 
 ## Architecture
@@ -30,13 +38,14 @@ FrameFlow provides an end-to-end creative workflow. The app collects a prompt an
 ```text
 Browser (React + Vite)
         |
-        | POST /api/storyboard   ---> Generates scene beats & voiceover narration
-        | POST /api/render-video ---> Triggers async video compilation job
+        | POST /api/storyboard   ---> Generates scenes with motion & narration choreography
+        | POST /api/render-video ---> Triggers async 2D animation rendering pipeline
         | GET  /api/video-status ---> Polls real-time progress (0% - 100%)
-        | GET  /api/video/{id}   ---> Streams and downloads MP4 video
+        | GET  /api/video/{id}   ---> Streams and downloads animated MP4 video
         v
 FastAPI Backend
- ├── video_generator.py (Pillow frame generator + edge-tts audio + FFmpeg stitcher)
+ ├── animation_engine.py (Character sprite builder, environment physics, 2D choreography)
+ ├── video_generator.py (Frame compilation + edge-tts audio + FFmpeg stitcher)
  └── generated_videos/  (Rendered MP4 artifacts)
 ```
 
@@ -46,9 +55,19 @@ FastAPI Backend
 FrameFlow-AI/
 ├── backend/
 │   ├── main.py
+│   ├── animation_engine.py
 │   ├── video_generator.py
 │   ├── requirements.txt
 │   └── generated_videos/
+├── frontend/
+│   ├── src/
+│   │   ├── App.jsx
+│   │   ├── main.jsx
+│   │   └── styles.css
+│   ├── .env
+│   ├── index.html
+│   ├── package.json
+│   └── vite.config.js
 ├── frontend/
 │   ├── src/
 │   │   ├── App.jsx
