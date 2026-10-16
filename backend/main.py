@@ -1,25 +1,38 @@
+"""
+FrameFlow AI - Main FastAPI Application.
+Provides endpoints for:
+- Universal prompt-to-storyboard generation (5s to 300s)
+- Background video rendering with cancellation support
+- Progress polling and provider metadata
+- Secure video streaming & download
+"""
+
 import asyncio
 import os
+import re
 import uuid
-from typing import Dict, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+from backend.prompt_interpreter import compute_scenes_for_duration, detect_entity, detect_environment
 from backend.video_generator import OUTPUT_DIR, render_video_job
+from backend.video_providers.manager import VideoProviderManager
 
-Style = Literal["Educational", "Cartoon", "Cinematic", "Story", "Nursery Rhyme"]
+Style = Literal["Cinematic", "Cartoon", "Educational", "Story", "Nursery Rhyme", "Cyberpunk", "Fantasy"]
 AspectRatio = Literal["16:9", "9:16", "1:1"]
-Duration = Literal[15, 30, 60]
+EngineMode = Literal["auto", "procedural", "ai_video"]
 
 
 class StoryboardRequest(BaseModel):
-    prompt: str = Field(min_length=8, max_length=1000)
+    prompt: str = Field(min_length=3, max_length=2000)
     style: Style = "Cinematic"
-    duration: Duration = 30
+    duration: int = Field(default=30, ge=5, le=300)
     aspect_ratio: AspectRatio = "16:9"
+    engine_mode: EngineMode = "auto"
 
 
 class Scene(BaseModel):
@@ -28,7 +41,8 @@ class Scene(BaseModel):
     description: str
     duration: int
     narration: str = ""
-    motion_type: str = "sway_and_bob"
+    motion_type: str = "hover_and_sway"
+    camera_motion: str = "pan_right"
     character_action: str = ""
     motion_instruction: str = ""
 
@@ -36,18 +50,22 @@ class Scene(BaseModel):
 class StoryboardResponse(BaseModel):
     prompt: str
     style: Style
-    duration: Duration
+    duration: int
     aspect_ratio: AspectRatio
-    scenes: list[Scene]
+    engine_mode: EngineMode
+    scenes: List[Scene]
+    entity: Dict[str, Any]
+    environment: Dict[str, Any]
     message: str
 
 
 class VideoRenderRequest(BaseModel):
-    prompt: str = Field(min_length=8, max_length=1000)
+    prompt: str = Field(min_length=3, max_length=2000)
     style: Style = "Cinematic"
-    duration: Duration = 30
+    duration: int = Field(default=30, ge=5, le=300)
     aspect_ratio: AspectRatio = "16:9"
-    scenes: Optional[list[Scene]] = None
+    engine_mode: EngineMode = "auto"
+    scenes: Optional[List[Scene]] = None
 
 
 class VideoStatusResponse(BaseModel):
@@ -55,156 +73,130 @@ class VideoStatusResponse(BaseModel):
     status: str
     progress: int
     stage: str
+    provider_used: Optional[str] = None
+    provider_name: Optional[str] = None
+    fallback_reason: Optional[str] = None
     video_url: Optional[str] = None
     error: Optional[str] = None
 
 
-app = FastAPI(title="FrameFlow AI API", version="0.3.0")
+app = FastAPI(title="FrameFlow AI API", version="2.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# In-memory job state store
+# In-memory jobs store
 jobs: Dict[str, dict] = {}
+# Cancel flags
+cancelled_jobs: set[str] = set()
 
 
-def build_scenes(request: StoryboardRequest) -> list[Scene]:
-    scene_count = 3 if request.duration == 15 else 4 if request.duration == 30 else 5
-    base_duration = request.duration // scene_count
-    remainder = request.duration - (base_duration * scene_count)
-    prompt_clean = request.prompt.strip()
-
-    # Choreography mapping for true animated video
-    motion_profiles = [
-        ("sway_and_bob", "Gentle Floating & Sway", "Wakes up gracefully on the magical water, gently swaying side-to-side (±15°) with floating rhythmic bobbing."),
-        ("bounce_and_hop", "High Bounce with Squash & Stretch", "Rhythmic parabolic jumps with classical squash on landing (0.74x) and stretch in air (1.28x), sending expanding water ripples across the pond."),
-        ("pirouette_spin", "360° Dance Pirouette", "Full 360-degree dance pirouette with perspective flip and centrifugal magical sparkles flying outward."),
-        ("grand_finale", "Joyful Finale Celebration", "Energetic celebratory dance with high leaps, rapid shimmy, and shimmering water reflection."),
-        ("sway_and_bob", "Encore Floating Bow", "Graceful bow on the enchanted pond under glowing starlight, settling into tranquil ripples."),
-    ]
-
-    # Style-specific storytelling narratives and visual staging
-    style_templates = {
-        "Cinematic": [
-            ("The Awakening", f"Panoramic camera reveals {prompt_clean}. Soft volumetric mist and glowing water reflections.", f"On a tranquil enchanted pond, the dance begins: {prompt_clean}."),
-            ("Catching the Rhythm", "Dynamic medium focus tracking the character as the melody gathers momentum.", "With joyful courage, the character leaps into the rhythm, sending ripples across the water."),
-            ("The Magical Pirouette", "Close camera orbit as the character spins gracefully in mid-air.", "Spinning under the moonlight, a flurry of golden sparkles bursts into the night sky."),
-            ("The Grand Celebration", "Sweeping crane pullback revealing the full radiant dance on the illuminated pond.", "The water sings in harmony as the final dance reaches its triumphant crescendo."),
-            ("Lingering Starlight", "Twilight silhouette on the glowing water, echoing the beauty of the performance.", "From first thought to next frame, the magic of the dance lingers on."),
-        ],
-        "Cartoon": [
-            ("Jump into Action!", f"Vibrant color splash: {prompt_clean}! High-energy bouncy entrance.", f"Whoa, look at that! It's {prompt_clean}! Time to dance and groove!"),
-            ("Bouncing Bonanza!", "Zany cartoon physics with exaggerated squash, stretch, and bouncy hops.", "Boing! Bouncing high into the air and splashing joyful waves everywhere!"),
-            ("Super Spin Twirl!", "Whirlwind cartoon spin with sparkling stars and comic action lines.", "Round and round we go! A dizzying, delightful 360-degree twirl!"),
-            ("Victory Hop!", "Confetti water splashes and huge cartoon smiles.", "Hooray! What an incredible dance party on the pond!"),
-            ("See Ya Next Dance!", "Happy wave and playful wink to the audience.", "Until our next great adventure, keep on moving and grooving!"),
-        ],
-        "Educational": [
-            ("Introduction of Form", f"Clear focal staging observing: {prompt_clean}. Fluid mechanics and natural balance.", f"Notice the natural equilibrium of our subject: {prompt_clean} as kinetic movement begins."),
-            ("Oscillation and Rhythm", "Analytical view demonstrating harmonic bounce, energy transfer, and ripple propagation.", "As vertical force is applied, elastic deformation creates harmonic oscillation across the surface."),
-            ("Rotational Dynamics", "Demonstrating angular momentum and symmetry through a continuous 360-degree axis rotation.", "Through conservation of angular momentum, the spin maintains clean center-of-mass balance."),
-            ("Harmonic Synthesis", "Full environmental overview illustrating resonance between character and fluid surface.", "All physical forces align, creating a textbook demonstration of fluid-surface dynamics."),
-            ("Concluding Principle", "Summary perspective highlighting repeatable biomechanical principles in nature.", "A perfect fusion of organic rhythm, motion mechanics, and fluid physics."),
-        ],
-        "Story": [
-            ("Once Upon a Thought", f"Atmospheric storybook composition: {prompt_clean}. Gentle fireflies and moonlit waves.", f"Once upon a quiet evening, a magical dance unfolded: {prompt_clean}."),
-            ("The Rhythm Awakens", "The character finds its true groove, hopping joyfully across the water lilies.", "Every bounce told a story of courage, splashing light into the twilight pond."),
-            ("A Whirl of Magic", "Spinning gracefully as stardust swirls around the petals.", "In a breathtaking pirouette, the night seemed to stand still in wonder."),
-            ("A Heartwarming Finale", "Soft golden glow illuminates the peaceful pond as the dance concludes.", "And the pond whispered its joy, holding the memory of this enchanted moment forever."),
-            ("Goodnight Little Lotus", "Gentle closing scene under sleepy constellations.", "Sleep sweet, until the dawn sun wakes the pond again."),
-        ],
-        "Nursery Rhyme": [
-            ("Twinkle and Begin!", f"Playful pastel skies with floating stars: {prompt_clean}.", f"Listen close, little friends! Here comes {prompt_clean}!"),
-            ("Hop Hop Hop!", "Cheery little hops splashing along the happy rainbow ripples.", "Hop hop hop, jump up high! Tap tap tap, touching the sky!"),
-            ("Spin Around!", "Bouncy spinning fun with sparkling bubbles.", "Twirl around, spin and play, dancing all our cares away!"),
-            ("Happy Claps!", "Cheery celebration with sweet smiling stars.", "Clap your hands and shout hooray, what a happy, sunny day!"),
-            ("Sweet Dreams", "Gentle lullaby chime with sleepy moonbeams.", "Rest your head and close your eyes, under the cozy nighttime skies!"),
-        ],
-    }
-
-    beats = style_templates.get(request.style, style_templates["Cinematic"])
-
-    return [
-        Scene(
-            scene_number=index + 1,
-            title=beats[index][0],
-            description=beats[index][1],
-            narration=beats[index][2],
-            motion_type=motion_profiles[index][0],
-            character_action=motion_profiles[index][1],
-            motion_instruction=motion_profiles[index][2],
-            duration=base_duration + (1 if index < remainder else 0),
-        )
-        for index in range(scene_count)
-    ]
+def create_scenes_from_prompt(prompt: str, style: str, duration: int) -> List[Scene]:
+    """Generates prompt-specific scenes across any duration up to 300s."""
+    raw_scenes = compute_scenes_for_duration(prompt, style, duration)
+    return [Scene(**s) for s in raw_scenes]
 
 
-async def background_video_runner(job_id: str, prompt: str, style: str, aspect_ratio: str, duration: int, scenes: list[Scene]):
+async def background_video_runner(
+    job_id: str,
+    prompt: str,
+    style: str,
+    aspect_ratio: str,
+    duration: int,
+    scenes: List[Scene],
+    engine_mode: str,
+):
     async def update_progress(pct: int, stage_msg: str):
         if job_id in jobs:
             jobs[job_id]["progress"] = pct
             jobs[job_id]["stage"] = stage_msg
 
+    def is_cancelled() -> bool:
+        return job_id in cancelled_jobs
+
     try:
         jobs[job_id]["status"] = "processing"
-        jobs[job_id]["stage"] = "Starting generation..."
-        jobs[job_id]["progress"] = 5
+        jobs[job_id]["stage"] = "Initializing render pipeline..."
+        jobs[job_id]["progress"] = 3
 
-        video_path = await render_video_job(
+        result = await render_video_job(
             job_id=job_id,
             prompt=prompt,
             style=style,
             aspect_ratio=aspect_ratio,
             duration=duration,
             scenes=scenes,
+            engine_mode=engine_mode,
             progress_callback=update_progress,
+            is_cancelled_func=is_cancelled,
         )
+
+        if is_cancelled():
+            jobs[job_id]["status"] = "cancelled"
+            jobs[job_id]["stage"] = "Render cancelled by user."
+            return
 
         jobs[job_id]["status"] = "completed"
         jobs[job_id]["progress"] = 100
         jobs[job_id]["stage"] = "Video ready for playback!"
         jobs[job_id]["video_url"] = f"/api/video/{job_id}"
-        jobs[job_id]["video_path"] = video_path
+        jobs[job_id]["video_path"] = result["video_path"]
+        jobs[job_id]["provider_used"] = result["provider_used"]
+        jobs[job_id]["provider_name"] = result["provider_name"]
+        jobs[job_id]["fallback_reason"] = result["fallback_reason"]
+
+    except asyncio.CancelledError:
+        jobs[job_id]["status"] = "cancelled"
+        jobs[job_id]["stage"] = "Render cancelled by user."
     except Exception as e:
         import traceback
         traceback.print_exc()
         jobs[job_id]["status"] = "failed"
         jobs[job_id]["error"] = str(e)
-        jobs[job_id]["stage"] = f"Failed: {str(e)}"
+        jobs[job_id]["stage"] = f"Render failed: {str(e)}"
 
 
 @app.get("/api/health")
 def health() -> dict[str, str]:
-    return {"status": "ok"}
+    return {"status": "ok", "version": "2.0.0"}
+
+
+@app.get("/api/providers")
+def get_providers():
+    manager = VideoProviderManager()
+    return manager.get_provider_status()
 
 
 @app.post("/api/storyboard", response_model=StoryboardResponse)
 def create_storyboard(request: StoryboardRequest) -> StoryboardResponse:
-    scenes = build_scenes(request)
+    scenes = create_scenes_from_prompt(request.prompt, request.style, request.duration)
+    entity = detect_entity(request.prompt)
+    env = detect_environment(request.prompt)
+
     return StoryboardResponse(
         prompt=request.prompt,
         style=request.style,
         duration=request.duration,
         aspect_ratio=request.aspect_ratio,
+        engine_mode=request.engine_mode,
         scenes=scenes,
-        message=f"Storyboard ready ({len(scenes)} scenes). Click 'Render Video' to produce the narrated MP4 preview.",
+        entity=entity,
+        environment=env,
+        message=f"Storyboard generated with {len(scenes)} coherent narrative scenes ({request.duration}s total).",
     )
 
 
 @app.post("/api/render-video")
 async def start_video_render(request: VideoRenderRequest, background_tasks: BackgroundTasks) -> dict:
-    scenes = request.scenes or build_scenes(
-        StoryboardRequest(
-            prompt=request.prompt,
-            style=request.style,
-            duration=request.duration,
-            aspect_ratio=request.aspect_ratio,
-        )
+    scenes = request.scenes or create_scenes_from_prompt(
+        request.prompt,
+        request.style,
+        request.duration,
     )
     job_id = str(uuid.uuid4())
     jobs[job_id] = {
@@ -214,6 +206,9 @@ async def start_video_render(request: VideoRenderRequest, background_tasks: Back
         "stage": "Queued for rendering...",
         "video_url": None,
         "error": None,
+        "provider_used": None,
+        "provider_name": None,
+        "fallback_reason": None,
     }
 
     background_tasks.add_task(
@@ -224,6 +219,7 @@ async def start_video_render(request: VideoRenderRequest, background_tasks: Back
         aspect_ratio=request.aspect_ratio,
         duration=request.duration,
         scenes=scenes,
+        engine_mode=request.engine_mode,
     )
 
     return {
@@ -243,16 +239,40 @@ def get_video_status(job_id: str) -> VideoStatusResponse:
         status=job["status"],
         progress=job.get("progress", 0),
         stage=job.get("stage", ""),
+        provider_used=job.get("provider_used"),
+        provider_name=job.get("provider_name"),
+        fallback_reason=job.get("fallback_reason"),
         video_url=job.get("video_url"),
         error=job.get("error"),
     )
 
 
+@app.post("/api/cancel-job/{job_id}")
+def cancel_video_job(job_id: str):
+    if job_id not in jobs:
+        raise HTTPException(status_code=404, detail="Job not found")
+    cancelled_jobs.add(job_id)
+    jobs[job_id]["status"] = "cancelling"
+    jobs[job_id]["stage"] = "Cancelling render job..."
+    return {"status": "cancelling", "job_id": job_id}
+
+
 @app.get("/api/video/{job_id}")
 def download_video(job_id: str):
+    # Security: validate job_id to prevent directory traversal
+    if not re.match(r"^[a-zA-Z0-9_\-]+$", job_id):
+        raise HTTPException(status_code=400, detail="Invalid job ID format")
+
     video_path = os.path.join(OUTPUT_DIR, f"{job_id}.mp4")
+    # Verify path is strictly inside OUTPUT_DIR
+    real_path = os.path.realpath(video_path)
+    real_dir = os.path.realpath(OUTPUT_DIR)
+    if not real_path.startswith(real_dir):
+        raise HTTPException(status_code=403, detail="Unsafe file path access")
+
     if not os.path.exists(video_path):
         raise HTTPException(status_code=404, detail="Video file not found")
+
     return FileResponse(
         video_path,
         media_type="video/mp4",

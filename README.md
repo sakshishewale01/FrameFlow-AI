@@ -1,159 +1,184 @@
 # FrameFlow AI
 
-**From first thought to next frame.** FrameFlow AI is an automated text-to-animated-video creative studio that turns a text prompt into an intelligent choreographed storyboard and renders an animated MP4 video with consistent characters, dynamic motion, and voiceover narration.
+**From first thought to next frame.** FrameFlow AI is an automated general-purpose text-to-animation studio that transforms arbitrary user prompts into intelligent, multi-scene choreographed storyboards and renders genuine animated MP4 videos with dynamic sprites, multi-depth parallax environments, virtual camera movement, and synchronized voiceover narration.
 
-## Overview
+---
 
-FrameFlow provides an end-to-end creative workflow:
-1. **Prompt Analysis**: Extracts character traits, colors, setting, and actions from the prompt.
-2. **Choreographed Storyboarding**: Formulates structured scene beats with visual staging, dance choreography (swaying, squash & stretch bouncing, 360° pirouettes), and voiceover scripts.
-3. **Consistent Character Design**: Generates a high-definition character sprite once, ensuring 100% visual identity consistency across every scene.
-4. **Living Environment Physics**: Renders animated water wave displacement, floating bobbing lily pads, ground contact shadows, expanding impact ripple rings, and rising glowing fireflies.
-5. **Real 2D Animation Engine**: Applies classical animation principles (squash & stretch, parabolic bounce trajectories, rotational sway, horizontal perspective flips).
-6. **MP4 Video & Audio Assembly**: Remuxes synchronized voiceover narration with the animated footage into a streaming-ready MP4 video.
+## Key Features
 
-## Current features
+1. **Universal Prompt-to-Animation Semantic Engine**:
+   - Accepts arbitrary user prompts describing characters, vehicles, objects, animals, nature, environments, actions, or stories (never hardcoded to any single example).
+   - Intelligently extracts subject category, traits, colors, setting, lighting, motion choreography, and camera dynamics.
+   - Automatically partitions any requested duration into coherent narrative acts and sequential scenes.
 
-- Dark, responsive creative studio interface with FrameFlow branding.
-- Prompt editor with validation and clear empty, loading, success, and error states.
-- Educational, Cartoon, Cinematic, Story, and Nursery Rhyme style choices.
-- 15, 30, and 60 second duration choices with adaptive scene splitting.
-- 16:9, 9:16, and 1:1 canvas aspect ratio choices.
-- **Choreographed Animation Staging**: Scene cards show distinct motion instructions (e.g. *Sway & Bob*, *Squash, Stretch & High Hopping*, *360° Dance Pirouette*, *Joyful Finale Celebration*).
-- **True 2D Character Animation**: Characters physically hop, stretch, squash, tilt, and spin rather than remaining static slides.
-- **Environment Motion**: Living water surfaces, wave oscillation, and dynamic particle systems.
-- **Consistent Character Appearance**: Character sprite is generated and maintained across all scenes.
-- **Voiceover Narration**: Free neural voiceover synthesis powered by Microsoft Edge Neural Voices.
-- **CPU-Optimized (40+ FPS)**: Renders directly on Windows with 16 GB RAM and no GPU requirements.
-- **In-browser HTML5 Video Player & Direct MP4 Download**.
+2. **Full Multi-Layer Procedural 2D Rendering Engine**:
+   - Generates genuine 2D animations using Python (`Pillow`, `NumPy`, `imageio`, `imageio-ffmpeg`).
+   - Category-specific procedural sprite rendering (aerodynamic rockets with exhaust flame, sports cars with headlights & spinning wheels, marine creatures with swimming undulation, birds with flapping wings, astronauts with walking strides, and celestial bodies with rotating corona flares).
+   - Multi-depth parallax backgrounds (distant celestial/sky layers, midground terrain/skylines, animated ground/water with wave oscillation).
+   - Dynamic 2D camera viewport motion: smooth zoom push-in, dramatic pull-back, horizontal panning, tracking shots, and crane tilts.
+   - Atmospheric particle systems: rain with streaks, bubbles, falling snow, drifting space dust, and fire embers.
+   - Cinematic letterboxing with scene counters, choreography badges, and subtitle narration.
 
-## Technology stack
+3. **Optional AI Video Generation with Graceful Fallback**:
+   - Modular provider architecture under `backend/video_providers/`:
+     - `procedural`: 100% free, runs locally with zero external API dependencies.
+     - `ai_video`: Supports configurable external AI video generation models (Pollinations, Hugging Face Inference API, Replicate).
+   - Configurable via standard environment variables (`POLLINATIONS_API_KEY`, `HF_TOKEN`, `REPLICATE_API_TOKEN`).
+   - If an AI video provider is unconfigured, rate-limited, or unavailable, the system automatically and seamlessly falls back to the local Procedural Animation Engine without failing the render.
 
-- Frontend: React 18, Vite, JavaScript, CSS, Lucide React icons.
-- Backend: Python, FastAPI, Pydantic, Uvicorn, Pillow, NumPy, imageio-ffmpeg, edge-tts.
-- Communication: JSON over HTTP with CORS enabled for the local Vite server.
+4. **Extended Durations (5s to 300s / 5 Minutes)**:
+   - Supports user-selected durations from short 5-15 second clips up to 300 seconds (5 full minutes).
+   - Divides longer videos into sequential scenes, renders each scene directly to disk with frame streaming to keep memory usage low, and stitches them into a single master MP4 via FFmpeg.
+
+5. **Integrated Background Jobs & Interactive UI**:
+   - Asynchronous job execution with real-time percentage progress and descriptive stage polling.
+   - Job cancellation endpoint (`/api/cancel-job/{id}`) to halt long renders on demand.
+   - Secure video streaming & download endpoint with path-traversal prevention.
+   - HTML5 video player with autoplay, replay, and instant MP4 file download.
+   - Creative style presets: Cinematic, Cartoon, Cyberpunk, Educational, Fantasy, Story, Nursery Rhyme.
+   - Canvas formats: 16:9 Landscape, 9:16 Shorts/Reels, 1:1 Square.
+
+---
 
 ## Architecture
 
 ```text
 Browser (React + Vite)
         |
-        | POST /api/storyboard   ---> Generates scenes with motion & narration choreography
-        | POST /api/render-video ---> Triggers async 2D animation rendering pipeline
-        | GET  /api/video-status ---> Polls real-time progress (0% - 100%)
-        | GET  /api/video/{id}   ---> Streams and downloads animated MP4 video
+        | POST /api/storyboard   ---> Universal semantic prompt analysis & scene mapping
+        | POST /api/render-video ---> Launches async background rendering job
+        | GET  /api/video-status ---> Polls real-time progress & engine metadata
+        | POST /api/cancel-job   ---> Cancels active render job
+        | GET  /api/video/{id}   ---> Streams and downloads validated MP4 video
         v
 FastAPI Backend
- ├── animation_engine.py (Character sprite builder, environment physics, 2D choreography)
- ├── video_generator.py (Frame compilation + edge-tts audio + FFmpeg stitcher)
- └── generated_videos/  (Rendered MP4 artifacts)
+ ├── prompt_interpreter.py       (Semantic entity extraction & multi-scene architect)
+ ├── procedural_engine.py        (Parallax backgrounds, dynamic sprites, camera transforms)
+ ├── video_providers/            (Base interface, AI video provider, Procedural provider, Manager)
+ ├── video_generator.py          (Audio synthesis, sequential clip compilation, FFmpeg stitcher)
+ └── generated_videos/           (Master rendered MP4 files)
 ```
 
-## Project structure
+---
+
+## Project Structure
 
 ```text
 FrameFlow-AI/
 ├── backend/
-│   ├── main.py
-│   ├── animation_engine.py
-│   ├── video_generator.py
-│   ├── requirements.txt
-│   └── generated_videos/
+│   ├── main.py                  # FastAPI server & route handlers
+│   ├── prompt_interpreter.py    # Universal prompt parser & narrative beats
+│   ├── procedural_engine.py     # 2D procedural rendering engine
+│   ├── video_generator.py       # Render orchestrator & FFmpeg stitcher
+│   ├── test_pipeline.py         # End-to-end verification test suite
+│   ├── requirements.txt         # Python dependencies
+│   ├── generated_videos/        # Rendered MP4 output directory
+│   └── video_providers/
+│       ├── __init__.py
+│       ├── base.py              # Base provider interface
+│       ├── procedural_provider.py
+│       ├── ai_provider.py       # External AI video API integration
+│       └── manager.py           # Provider orchestrator & fallback
 ├── frontend/
 │   ├── src/
-│   │   ├── App.jsx
+│   │   ├── App.jsx              # Studio UI with duration controls, player, & progress
 │   │   ├── main.jsx
-│   │   └── styles.css
-│   ├── .env
-│   ├── index.html
-│   ├── package.json
-│   └── vite.config.js
-├── frontend/
-│   ├── src/
-│   │   ├── App.jsx
-│   │   ├── main.jsx
-│   │   └── styles.css
-│   ├── .env
+│   │   └── styles.css           # Modern dark-glassmorphic stylesheet
 │   ├── index.html
 │   ├── package.json
 │   └── vite.config.js
 └── README.md
 ```
 
+---
+
 ## Prerequisites
 
-- Windows 10/11
-- Python 3.10 or newer
-- Node.js 18 or newer and npm
+- **OS**: Windows 10 or 11
+- **Python**: 3.10 or newer (Python 3.14 compatible)
+- **Node.js**: 18 or newer and npm
 
-## Windows setup
+---
 
-Open PowerShell in the project folder:
+## Windows Setup & Installation
 
+### 1. Open PowerShell in the project directory
 ```powershell
-cd "C:\Users\saksh\OneDrive\Pictures\Documents\FrameFlow-AI"
+cd "c:\Users\saksh\OneDrive\Pictures\Documents\FrameFlow-AI"
 ```
 
-Create and activate a backend virtual environment:
-
+### 2. Set up Backend Python Virtual Environment
 ```powershell
-py -m venv .venv
+# Create virtual environment (if not already created)
+python -m venv .venv
+
+# Activate virtual environment
 .\.venv\Scripts\Activate.ps1
+
+# Install required Python dependencies
 python -m pip install -r backend\requirements.txt
 ```
 
-In a second PowerShell terminal, install frontend dependencies:
-
+### 3. Optional: Configure AI Video Provider
+If you want to use external AI video generation, create a `.env` file in the root or set environment variables:
 ```powershell
-cd "C:\Users\saksh\OneDrive\Pictures\Documents\FrameFlow-AI\frontend"
+# Optional Pollinations API key
+$env:POLLINATIONS_API_KEY="your_api_key_here"
+
+# Or optional Hugging Face Token
+$env:HF_TOKEN="your_hf_token_here"
+```
+*(If no key is configured, FrameFlow automatically uses the built-in Procedural 2D Engine with zero setup.)*
+
+### 4. Install Frontend Dependencies
+```powershell
+cd frontend
 npm install
+cd ..
 ```
 
-## Run the application
+---
 
-Terminal 1, from the project root with the virtual environment active:
+## Running the Application
 
+### Terminal 1: Start FastAPI Backend
+From the project root:
 ```powershell
+.\.venv\Scripts\Activate.ps1
 uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
 ```
+- API Docs: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+- API Health Check: [http://127.0.0.1:8000/api/health](http://127.0.0.1:8000/api/health)
 
-Terminal 2, from `frontend\`:
-
+### Terminal 2: Start Frontend Development Server
+In a second PowerShell terminal:
 ```powershell
+cd frontend
 npm run dev
 ```
+Open [http://localhost:5173](http://localhost:5173) in your browser.
 
-Open the app at [http://localhost:5173](http://localhost:5173). FastAPI's interactive documentation is at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs), and the health check is at `http://127.0.0.1:8000/api/health`.
+---
 
-## Example workflow
+## Running the Test Suite
 
-Prompt:
+To verify the end-to-end rendering pipeline across different prompts, durations, and aspect ratios:
+```powershell
+python -m backend.test_pipeline
+```
+This tests:
+- Semantic entity and environment parsing
+- Multi-scene storyboard generation
+- Sequential rendering of 16:9, 9:16, and 1:1 video clips
+- FFmpeg container integrity validation (ensures valid, uncorrupted MP4s)
 
-> A tiny lighthouse keeper discovers a constellation hidden in the ocean and follows its light home.
+---
 
-Choose `Cinematic`, `30s`, and `16:9`, then click **Generate storyboard**. The backend returns four rule-based scene beats, each with a title, description, and duration. The interface labels this as a planning preview so it is not confused with generated video.
+## What Works & Technical Details
 
-## Limitations
-
-- Scene descriptions use fixed rule-based beats; there is no model call.
-- No images, audio, narration, video rendering, persistence, authentication, or deployment are implemented.
-- The local API URL is intentionally fixed for this learning phase.
-
-## Learning objectives
-
-- Understand React state, controlled form inputs, conditional rendering, and async requests.
-- Understand a FastAPI route, Pydantic request/response models, and CORS.
-- Trace a JSON request from the browser to the backend and back.
-- Practice separating a useful product workflow from future AI integrations.
-
-## Future enhancements
-
-Add a provider-independent AI service layer, scene editing, visual references, user projects, downloadable storyboards, accessibility review, automated tests, and video rendering only after the planning workflow is stable.
-
-## Contributing
-
-This is a personal learning project, but feedback and small educational improvements are welcome. Please explain the change and keep the local setup instructions accurate.
-
-## License
-
-No license has been selected yet. Treat the repository as all rights reserved until a license is added.
+- **Universal Prompt Interpretation**: Generates custom scenes, motions, and narration for any prompt (vehicles, animals, robots, humanoids, nature, celestial bodies).
+- **Actual Playable MP4 Video**: Renders real 15-24 FPS video encoded with H.264 (`yuv420p`, `-movflags +faststart`) and AAC audio.
+- **Duration Support**: Clips from 5 seconds up to 300 seconds (5 minutes), sequentially segmented and stitched.
+- **Audio Synchronization**: Automatically generates voiceover narration via Edge TTS; falls back gracefully to clean audio tracks if offline so rendering never fails.
+- **Memory Safety**: Frames are streamed sequentially to temporary video files on disk rather than accumulating in RAM.
+- **Job Cancellation**: Allows interrupting in-progress video renders cleanly.
