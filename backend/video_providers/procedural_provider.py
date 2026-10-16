@@ -1,6 +1,7 @@
 """
 FrameFlow Procedural 2D Animation Provider.
 Generates genuine 2D animations using local Pillow and ImageIO without any external APIs.
+Supports Devanagari Hindi/Marathi subtitles and articulated procedural sprites.
 """
 
 import math
@@ -34,7 +35,7 @@ class ProceduralProvider(BaseVideoProvider):
         fps: int = 15,
         progress_callback: Optional[Callable] = None,
     ) -> str:
-        width, height = RESOLUTIONS.get(aspect_ratio, (1280, 720))
+        width, height = RESOLUTIONS.get(aspect_ratio, (720, 1280) if aspect_ratio == "9:16" else (1280, 720))
         total_frames = max(1, int(duration * fps))
 
         scene_title = scene.get("title", f"Scene {scene_idx + 1}")
@@ -42,6 +43,7 @@ class ProceduralProvider(BaseVideoProvider):
         narration = scene.get("narration", "")
         motion_type = scene.get("motion_type", "hover_and_sway")
         camera_motion = scene.get("camera_motion", "pan_right")
+        show_subtitles = scene.get("show_subtitles", True)
 
         writer = imageio.get_writer(
             output_path,
@@ -68,10 +70,10 @@ class ProceduralProvider(BaseVideoProvider):
                     frame_idx=f,
                     total_frames_in_scene=total_frames,
                     fps=fps,
+                    show_subtitles=show_subtitles,
                 )
                 writer.append_data(np.array(frame_img))
 
-                # Periodically report frame-level micro-progress
                 if progress_callback and f % (fps * 2) == 0:
                     pct = int((f / total_frames) * 100)
                     await progress_callback(pct, f"Rendering frame {f+1}/{total_frames} of Scene {scene_idx+1}...")

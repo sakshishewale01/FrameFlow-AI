@@ -7,17 +7,28 @@ import {
   Cpu,
   Download,
   Film,
+  Globe,
   Info,
+  Languages,
   LoaderCircle,
+  Mic,
+  MicOff,
   Play,
   RotateCcw,
   Sliders,
   Sparkles,
   StopCircle,
+  Subtitles,
   Video,
   Volume2,
   WandSparkles,
 } from "lucide-react";
+
+const languages = [
+  { id: "mr", label: "मराठी (Marathi)", icon: "🚩", flag: "MR" },
+  { id: "hi", label: "हिंदी (Hindi)", icon: "🇮🇳", flag: "HI" },
+  { id: "en", label: "English", icon: "🌐", flag: "EN" },
+];
 
 const styles = [
   "Cinematic",
@@ -29,31 +40,56 @@ const styles = [
   "Nursery Rhyme",
 ];
 
-const durationPresets = [15, 30, 60, 120, 300];
-const aspectRatios = ["16:9", "9:16", "1:1"];
+const durationPresets = [15, 30, 60, 90, 120, 180, 300];
+
+const aspectRatios = [
+  { id: "9:16", label: "9:16", desc: "Shorts & Reels", tag: "Recommended" },
+  { id: "16:9", label: "16:9", desc: "YouTube Landscape", tag: "Widescreen" },
+  { id: "1:1", label: "1:1", desc: "Square Post", tag: "Instagram" },
+];
 
 const engineModes = [
   { id: "auto", label: "Auto (AI Video with Procedural Fallback)" },
-  { id: "procedural", label: "Procedural 2D Engine (Offline / Local Fast)" },
+  { id: "procedural", label: "Procedural 2D Engine (100% Free / Local Fast)" },
   { id: "ai_video", label: "AI Video Generation (Requires API Key)" },
 ];
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 
-const samplePrompts = [
-  "A sleek red sports car zooming down a neon-lit cyberpunk highway in the rain",
-  "A majestic eagle soaring over snow-capped mountain peaks at golden sunset",
-  "A deep sea submarine exploring bioluminescent underwater coral ruins",
-  "A friendly astronaut repairing a solar satellite in deep space with orbiting planets",
-];
+const samplePromptsByLang = {
+  mr: [
+    { text: "एका छोट्या मांजरीने गावातल्या सगळ्यांना हसवलं.", style: "Cartoon", note: "मांजर व गाव" },
+    { text: "एका हुशार मुलीने आपल्या गावाला पाण्याच्या समस्येतून वाचवलं.", style: "Story", note: "हुशार मुलगी" },
+    { text: "एक गरीब मुलगा मेहनत करून मोठं यश मिळवतो.", style: "Story", note: "कष्टाळू मुलगा" },
+    { text: "एका जादुई तळ्यात एक सुंदर गुलाबी कमळ नाचतं.", style: "Cinematic", note: "गुलाबी कमळ" },
+  ],
+  hi: [
+    { text: "एक छोटा हाथी जंगल में अपना खोया हुआ दोस्त ढूँढता है।", style: "Story", note: "छोटा हाथी" },
+    { text: "एक गरीब लड़का मेहनत करके बड़ा अफसर बनता है।", style: "Story", note: "मेहनती लड़का" },
+    { text: "जादुई तालाब पर एक गुलाबी कमल खिलकर नाचता है।", style: "Cinematic", note: "गुलाबी कमल" },
+    { text: "एक नन्हा डायनासोर जंगल का सबसे मशहूर डांसर बनता है।", style: "Cartoon", note: "डायनासोर" },
+  ],
+  en: [
+    { text: "A tiny pink lotus dances on a magical pond.", style: "Cinematic", note: "Lotus & Water" },
+    { text: "A funny baby dinosaur tries to become a famous dancer.", style: "Cartoon", note: "Dancing Dino" },
+    { text: "A sleek red sports car zooming down a neon cyberpunk highway in the rain.", style: "Cyberpunk", note: "Sports Car" },
+    { text: "A friendly astronaut repairing a solar satellite in deep space.", style: "Cinematic", note: "Astronaut" },
+  ],
+};
 
 function App() {
-  const [prompt, setPrompt] = useState("");
-  const [style, setStyle] = useState("Cinematic");
-  const [duration, setDuration] = useState(30);
+  const [language, setLanguage] = useState("mr");
+  const [prompt, setPrompt] = useState("एका छोट्या मांजरीने गावातल्या सगळ्यांना हसवलं.");
+  const [style, setStyle] = useState("Cartoon");
+  const [duration, setDuration] = useState(15);
   const [customDuration, setCustomDuration] = useState(false);
-  const [aspectRatio, setAspectRatio] = useState("16:9");
+  const [aspectRatio, setAspectRatio] = useState("9:16");
   const [engineMode, setEngineMode] = useState("auto");
+
+  // Narration and Subtitle controls
+  const [narrationEnabled, setNarrationEnabled] = useState(true);
+  const [voiceGender, setVoiceGender] = useState("female");
+  const [showSubtitles, setShowSubtitles] = useState(true);
 
   const [storyboard, setStoryboard] = useState(null);
   const [status, setStatus] = useState("empty");
@@ -76,10 +112,19 @@ function App() {
     };
   }, []);
 
+  function handleLanguageChange(newLang) {
+    setLanguage(newLang);
+    const defaultSample = samplePromptsByLang[newLang]?.[0];
+    if (defaultSample) {
+      setPrompt(defaultSample.text);
+      setStyle(defaultSample.style);
+    }
+  }
+
   async function generateStoryboard(event) {
     if (event) event.preventDefault();
     if (prompt.trim().length < 3) {
-      setError("Please describe a character, scene, vehicle, animal, or action.");
+      setError("Please describe a character, story, action, or scene.");
       setStatus("error");
       return;
     }
@@ -100,6 +145,7 @@ function App() {
           style,
           duration,
           aspect_ratio: aspectRatio,
+          language,
           engine_mode: engineMode,
         }),
       });
@@ -115,7 +161,7 @@ function App() {
     } catch (requestError) {
       setError(
         requestError.message.includes("fetch")
-          ? "Could not connect to FastAPI server at " + API_BASE + ". Please ensure the backend is running."
+          ? "Could not connect to FastAPI server at " + API_BASE + ". Please ensure the backend is running (uvicorn backend.main:app)."
           : requestError.message,
       );
       setStatus("error");
@@ -124,13 +170,13 @@ function App() {
 
   async function startRenderVideo() {
     if (!prompt.trim() || prompt.trim().length < 3) {
-      setError("Prompt is required to render video.");
+      setError("Prompt is required to render animated video.");
       return;
     }
 
     setVideoStatus("rendering");
     setVideoProgress(3);
-    setVideoStage("Queuing video render job...");
+    setVideoStage("Queuing animation render pipeline...");
     setVideoError("");
     setProviderMeta(null);
 
@@ -143,6 +189,10 @@ function App() {
           style,
           duration,
           aspect_ratio: aspectRatio,
+          language,
+          narration_enabled: narrationEnabled,
+          voice_gender: voiceGender,
+          show_subtitles: showSubtitles,
           engine_mode: engineMode,
           scenes: storyboard?.scenes || null,
         }),
@@ -164,7 +214,7 @@ function App() {
           const statusData = await statusRes.json();
 
           setVideoProgress(statusData.progress || 0);
-          setVideoStage(statusData.stage || "Rendering animation...");
+          setVideoStage(statusData.stage || "Rendering frames...");
 
           if (statusData.status === "completed") {
             clearInterval(pollIntervalRef.current);
@@ -185,7 +235,7 @@ function App() {
             setVideoStage("Rendering cancelled by user.");
           }
         } catch {
-          // Keep polling on transient network glitch
+          // Keep polling on transient network delay
         }
       }, 1000);
     } catch (err) {
@@ -204,6 +254,8 @@ function App() {
     }
   }
 
+  const currentSamplePrompts = samplePromptsByLang[language] || samplePromptsByLang.en;
+
   return (
     <main className="app-shell">
       <div className="ambient ambient-one" />
@@ -216,215 +268,412 @@ function App() {
           <span>FrameFlow <em>AI</em></span>
         </a>
         <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-          <span className="beta-pill"><span className="pulse-dot" /> universal text-to-animation</span>
+          <span className="beta-pill"><span className="pulse-dot" /> Hindi & Marathi Animation Studio</span>
         </div>
       </nav>
 
       {/* Hero Header */}
       <section className="hero">
-        <div className="eyebrow"><Sparkles size={15} /> General-Purpose Text-to-Video Engine</div>
-        <h1>Any thought.<br /><span>Rendered frame by frame.</span></h1>
+        <div className="eyebrow"><Sparkles size={15} /> Real AI & Procedural 2D Animation Studio</div>
+        <h1>Any story.<br /><span>Rendered frame by frame.</span></h1>
         <p className="hero-copy">
-          From sports cars and deep-sea submarines to dragons, astronauts, or nature.
-          Support durations up to 5 minutes (300s) with 2D procedural motion, parallax cameras, and synchronized narration.
+          Create engaging Hindi, Marathi, and English animated videos for YouTube Shorts and Instagram Reels.
+          Features procedural 2D characters, dynamic parallax environments, virtual cameras, neural voiceovers, and native Devanagari subtitles.
         </p>
 
-        {/* Quick sample chips */}
+        {/* Language Tabs */}
+        <div className="language-selector" style={{ marginTop: "24px" }}>
+          {languages.map((l) => (
+            <button
+              key={l.id}
+              type="button"
+              className={`lang-btn ${language === l.id ? "active" : ""}`}
+              onClick={() => handleLanguageChange(l.id)}
+            >
+              <span>{l.icon}</span>
+              <span>{l.label}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Sample prompt chips */}
         <div className="sample-chips">
-          <span className="chip-label">Try an idea:</span>
-          {samplePrompts.map((p, idx) => (
+          <span className="chip-label">Sample Prompts:</span>
+          {currentSamplePrompts.map((p, idx) => (
             <button
               key={idx}
               type="button"
               className="sample-chip"
               onClick={() => {
-                setPrompt(p);
-                if (idx === 0) setStyle("Cyberpunk");
-                else if (idx === 1) setStyle("Cinematic");
-                else if (idx === 2) setStyle("Story");
-                else setStyle("Cinematic");
+                setPrompt(p.text);
+                setStyle(p.style);
               }}
             >
-              {p.slice(0, 36)}...
+              <strong>{p.note}:</strong> {p.text.slice(0, 38)}...
             </button>
           ))}
         </div>
       </section>
 
-      {/* Main Workspace */}
+      {/* Main Studio Workspace */}
       <section className="workspace">
         {/* Left Control Panel */}
-        <form className="control-panel card" onSubmit={generateStoryboard}>
+        <div className="card control-panel">
           <div className="section-heading">
             <div>
-              <span className="step-label">01 / prompt & settings</span>
-              <h2>Describe your scene</h2>
+              <span className="step-label">Creative Controls</span>
+              <h2>Prompt & Settings</h2>
             </div>
-            <WandSparkles className="heading-icon" size={22} />
+            <Sliders className="heading-icon" size={20} />
           </div>
 
-          <textarea
-            value={prompt}
-            onChange={(event) => setPrompt(event.target.value)}
-            placeholder="Describe characters, objects, vehicles, animals, nature, actions, or environments..."
-            maxLength={2000}
-            aria-label="Story prompt"
-          />
-          <div className="textarea-footer">
-            <span>Any subject: vehicle, creature, human, space, ocean, or city.</span>
-            <span>{prompt.length}/2000</span>
-          </div>
-
-          <div className="settings-grid">
-            {/* Visual Style */}
-            <label>
-              <span className="field-label">Visual Style</span>
-              <select value={style} onChange={(event) => setStyle(event.target.value)}>
-                {styles.map((option) => (
-                  <option key={option} value={option}>{option}</option>
-                ))}
-              </select>
+          <form onSubmit={generateStoryboard}>
+            {/* Prompt Input */}
+            <label className="field-label" htmlFor="prompt-input">
+              Story Prompt (मराठी, हिंदी, English)
             </label>
+            <textarea
+              id="prompt-input"
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              placeholder="Describe your character, actions, setting, or narrative..."
+            />
+            <div className="textarea-footer">
+              <span>{prompt.length} / 2000 characters</span>
+              <span>Supports Devanagari Unicode</span>
+            </div>
 
-            {/* Duration (5s to 300s) */}
-            <div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                <span className="field-label" style={{ margin: 0 }}>Duration: {duration}s {duration >= 60 ? `(${(duration / 60).toFixed(1)}m)` : ""}</span>
-                <button
-                  type="button"
-                  className="btn-toggle-custom"
-                  onClick={() => setCustomDuration(!customDuration)}
-                >
-                  <Sliders size={11} /> {customDuration ? "Presets" : "Custom slider"}
-                </button>
-              </div>
-
-              {!customDuration ? (
-                <div className="segmented">
-                  {durationPresets.map((option) => (
+            <div className="settings-grid">
+              {/* Aspect Ratio Selector with Shorts / Reels badge */}
+              <div>
+                <label className="field-label">Aspect Ratio</label>
+                <div className="aspect-grid">
+                  {aspectRatios.map((ar) => (
                     <button
+                      key={ar.id}
                       type="button"
-                      className={duration === option ? "selected" : ""}
-                      onClick={() => setDuration(option)}
-                      key={option}
+                      className={`aspect-btn ${aspectRatio === ar.id ? "selected" : ""}`}
+                      onClick={() => setAspectRatio(ar.id)}
                     >
-                      {option < 60 ? `${option}s` : `${option / 60}m`}
+                      <strong style={{ fontSize: "14px" }}>{ar.label}</strong>
+                      <span style={{ fontSize: "10px", color: "#9ca3af" }}>{ar.desc}</span>
+                      <span className="aspect-subtag">{ar.tag}</span>
                     </button>
                   ))}
                 </div>
-              ) : (
-                <div className="slider-wrap">
-                  <input
-                    type="range"
-                    min="5"
-                    max="300"
-                    step="5"
-                    value={duration}
-                    onChange={(e) => setDuration(Number(e.target.value))}
-                    className="duration-slider"
-                  />
-                  <div className="slider-markers">
-                    <span>5s</span>
-                    <span>1m</span>
-                    <span>2m</span>
-                    <span>3m</span>
-                    <span>5m (300s)</span>
+              </div>
+
+              {/* Duration Presets (15s Default for Shorts) */}
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                  <label className="field-label" style={{ margin: 0 }}>
+                    Duration: <strong style={{ color: "#f472b6" }}>{duration}s</strong> {duration === 15 && "(Shorts/Reels)"}
+                  </label>
+                  <button
+                    type="button"
+                    className="btn-toggle-custom"
+                    onClick={() => setCustomDuration(!customDuration)}
+                  >
+                    {customDuration ? "Preset list" : "Custom slider"}
+                  </button>
+                </div>
+
+                {customDuration ? (
+                  <div className="slider-wrap">
+                    <input
+                      type="range"
+                      className="duration-slider"
+                      min={5}
+                      max={300}
+                      step={5}
+                      value={duration}
+                      onChange={(e) => setDuration(Number(e.target.value))}
+                    />
+                    <div className="slider-markers">
+                      <span>5s</span>
+                      <span>15s (Shorts)</span>
+                      <span>60s (1m)</span>
+                      <span>180s (3m)</span>
+                      <span>300s (5m)</span>
+                    </div>
                   </div>
+                ) : (
+                  <div className="duration-pills">
+                    {durationPresets.map((d) => (
+                      <button
+                        key={d}
+                        type="button"
+                        className={`dur-pill ${duration === d ? "selected" : ""}`}
+                        onClick={() => setDuration(d)}
+                      >
+                        {d}s {d === 15 ? "🔥" : d >= 60 ? `(${d / 60}m)` : ""}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Style Presets */}
+              <div>
+                <label className="field-label" htmlFor="style-select">Art & Narrative Style</label>
+                <select
+                  id="style-select"
+                  value={style}
+                  onChange={(e) => setStyle(e.target.value)}
+                >
+                  {styles.map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Audio & Narration Controls */}
+              <div>
+                <label className="field-label">Audio & Subtitle Settings</label>
+                <div className="audio-controls-card">
+                  {/* Voiceover Toggle */}
+                  <div className="toggle-item">
+                    <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      {narrationEnabled ? <Mic size={14} color="#34d399" /> : <MicOff size={14} color="#9ca3af" />}
+                      <span>Neural Voiceover</span>
+                    </span>
+                    <label className="toggle-switch">
+                      <input
+                        type="checkbox"
+                        checked={narrationEnabled}
+                        onChange={(e) => setNarrationEnabled(e.target.checked)}
+                      />
+                      <span className="toggle-slider" />
+                    </label>
+                  </div>
+
+                  {/* Subtitles Toggle */}
+                  <div className="toggle-item">
+                    <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <Subtitles size={14} color="#60a5fa" />
+                      <span>On-Screen Subtitles</span>
+                    </span>
+                    <label className="toggle-switch">
+                      <input
+                        type="checkbox"
+                        checked={showSubtitles}
+                        onChange={(e) => setShowSubtitles(e.target.checked)}
+                      />
+                      <span className="toggle-slider" />
+                    </label>
+                  </div>
+
+                  {/* Voice Gender */}
+                  {narrationEnabled && (
+                    <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: "6px", borderTop: "1px solid #1a1e46" }}>
+                      <span style={{ fontSize: "11px", color: "#a5b4fc" }}>Voice Gender:</span>
+                      <div className="segmented" style={{ width: "160px", height: "32px" }}>
+                        <button
+                          type="button"
+                          className={voiceGender === "female" ? "selected" : ""}
+                          onClick={() => setVoiceGender("female")}
+                        >
+                          Female
+                        </button>
+                        <button
+                          type="button"
+                          className={voiceGender === "male" ? "selected" : ""}
+                          onClick={() => setVoiceGender("male")}
+                        >
+                          Male
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Rendering Engine Mode */}
+              <div>
+                <label className="field-label" htmlFor="engine-select">Rendering Engine</label>
+                <select
+                  id="engine-select"
+                  value={engineMode}
+                  onChange={(e) => setEngineMode(e.target.value)}
+                >
+                  {engineModes.map((em) => (
+                    <option key={em.id} value={em.id}>{em.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Action Button: Create Storyboard */}
+            <button
+              type="submit"
+              className="generate-button"
+              disabled={status === "loading" || videoStatus === "rendering"}
+            >
+              {status === "loading" ? (
+                <>
+                  <LoaderCircle className="spin" size={18} />
+                  <span>Analyzing Prompt & Mapping Scenes...</span>
+                </>
+              ) : (
+                <>
+                  <WandSparkles size={18} />
+                  <span>Generate Storyboard ({duration}s)</span>
+                </>
+              )}
+            </button>
+          </form>
+
+          {/* Error notice */}
+          {error && <div className="notice error">{error}</div>}
+        </div>
+
+        {/* Right Storyboard & Video Panel */}
+        <div className="card storyboard-panel">
+          <div className="storyboard-header">
+            <div>
+              <span className="step-label">Live Preview</span>
+              <h2>Storyboard & Animation</h2>
+            </div>
+            {storyboard && (
+              <span className="preview-badge">
+                <CheckCircle2 size={13} /> {storyboard.scenes.length} Scenes ({storyboard.language.toUpperCase()})
+              </span>
+            )}
+          </div>
+
+          {/* Render Active Video Progress Card */}
+          {videoStatus === "rendering" && (
+            <div className="progress-card">
+              <div className="progress-header">
+                <span>Rendering Animation...</span>
+                <span style={{ fontWeight: 700, color: "#38bdf8" }}>{videoProgress}%</span>
+              </div>
+              <div className="progress-bar-bg">
+                <div className="progress-bar-fill" style={{ width: `${videoProgress}%` }} />
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span className="progress-stage">
+                  <LoaderCircle className="spin" size={13} color="#818cf8" />
+                  <span>{videoStage}</span>
+                </span>
+                <button type="button" className="btn-cancel" onClick={cancelRender}>
+                  <StopCircle size={13} /> Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Render Completed Video Preview */}
+          {videoStatus === "ready" && videoUrl && (
+            <div className="video-preview-card">
+              <div className="video-player-wrap">
+                <video src={videoUrl} controls autoPlay loop playsInline />
+              </div>
+
+              <div className="video-toolbar">
+                <a
+                  href={videoUrl}
+                  download={`frameflow_${language}_${aspectRatio.replace(":", "x")}.mp4`}
+                  className="btn-download-video"
+                >
+                  <Download size={15} /> Download MP4 Video
+                </a>
+
+                <button
+                  type="button"
+                  className="btn-restart"
+                  onClick={startRenderVideo}
+                >
+                  <RotateCcw size={13} /> Re-render Animation
+                </button>
+              </div>
+
+              {providerMeta && (
+                <div className="meta-badges">
+                  <span className="badge-engine badge-success">
+                    <CheckCircle2 size={12} /> {providerMeta.name}
+                  </span>
+                  <span className="badge-engine">
+                    Aspect Ratio: {aspectRatio}
+                  </span>
+                  <span className="badge-engine">
+                    Language: {language.toUpperCase()}
+                  </span>
+                  {providerMeta.fallbackReason && (
+                    <div className="notice-fallback">
+                      <Info size={14} />
+                      <span>{providerMeta.fallbackReason}</span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
+          )}
 
-            {/* Aspect Ratio Canvas */}
-            <label>
-              <span className="field-label">Canvas Format</span>
-              <div className="segmented">
-                {aspectRatios.map((option) => (
-                  <button
-                    type="button"
-                    className={aspectRatio === option ? "selected" : ""}
-                    onClick={() => setAspectRatio(option)}
-                    key={option}
-                  >
-                    {option === "16:9" ? "16:9 Landscape" : option === "9:16" ? "9:16 Shorts" : "1:1 Square"}
-                  </button>
-                ))}
-              </div>
-            </label>
-
-            {/* Engine Mode */}
-            <label>
-              <span className="field-label">Render Engine Mode</span>
-              <select value={engineMode} onChange={(event) => setEngineMode(event.target.value)}>
-                {engineModes.map((m) => (
-                  <option key={m.id} value={m.id}>{m.label}</option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          {status === "error" && <div className="notice error">{error}</div>}
-
-          <button className="generate-button" type="submit" disabled={status === "loading"}>
-            {status === "loading" ? (
-              <><LoaderCircle className="spin" size={18} /> Generating prompt scenes...</>
-            ) : (
-              <>Map Storyboard & Scenes <ArrowUpRight size={18} /></>
-            )}
-          </button>
-        </form>
-
-        {/* Right Panel: Storyboard & Video Player */}
-        <section className="storyboard-panel">
-          <div className="storyboard-header">
-            <div>
-              <span className="step-label">02 / visual rhythm & animation</span>
-              <h2>Scene Beats & Video Studio</h2>
+          {/* Video Failure notice */}
+          {videoStatus === "failed" && (
+            <div className="notice error" style={{ marginTop: "14px" }}>
+              {videoError}
             </div>
-            <div className="preview-badge"><Film size={14} /> universal engine</div>
-          </div>
+          )}
 
-          {status === "empty" && <EmptyState />}
-          {status === "loading" && <LoadingState />}
+          {/* Storyboard Rendering Call-to-Action Bar */}
+          {storyboard && videoStatus !== "rendering" && (
+            <div className="render-action-bar">
+              <div className="bar-title">
+                <div>
+                  <h4><Film size={16} color="#ec4899" /> Ready to Render Animation</h4>
+                  <p>
+                    Universal procedural engine will compile {storyboard.scenes.length} choreographed scenes into an MP4 video with {language.toUpperCase()} audio and subtitles.
+                  </p>
+                </div>
+              </div>
 
-          {status === "success" && storyboard && (
-            <div className="scene-list">
-              {/* Detected Semantic Entity & Setting Tags */}
+              <button
+                type="button"
+                className="btn-render-video"
+                onClick={startRenderVideo}
+                disabled={videoStatus === "rendering"}
+              >
+                <Play size={16} fill="#fff" />
+                <span>Render Animated Video ({duration}s • {aspectRatio})</span>
+              </button>
+            </div>
+          )}
+
+          {/* Detected Subject Entity & Environment Summary */}
+          {storyboard && (
+            <div style={{ marginTop: "16px", marginBottom: "8px" }}>
               <div className="entity-tag-bar">
                 <span className="entity-pill">
-                  <strong>Subject:</strong> {storyboard.entity?.subtype?.toUpperCase() || "CUSTOM"} ({storyboard.entity?.category || "general"})
+                  Subject: <strong>{storyboard.entity.display_name || storyboard.entity.subtype}</strong> ({storyboard.entity.category})
                 </span>
                 <span className="entity-pill">
-                  <strong>Environment:</strong> {storyboard.environment?.name?.toUpperCase() || "ATMOSPHERE"}
+                  Environment: <strong>{storyboard.environment.name}</strong>
                 </span>
                 <span className="entity-pill">
-                  <strong>Duration:</strong> {storyboard.duration}s ({storyboard.scenes?.length} scenes)
+                  Format: <strong>{storyboard.aspect_ratio}</strong>
+                </span>
+                <span className="entity-pill">
+                  Language: <strong>{storyboard.language.toUpperCase()}</strong>
                 </span>
               </div>
+            </div>
+          )}
 
-              {/* Storyboard Scene Beats */}
+          {/* Storyboard Scene List */}
+          {storyboard && (
+            <div className="scene-list" style={{ marginTop: "12px" }}>
               {storyboard.scenes.map((scene) => (
-                <article className="scene-card" key={scene.scene_number}>
+                <div key={scene.scene_number} className="scene-card">
                   <div className="scene-number">{String(scene.scene_number).padStart(2, "0")}</div>
                   <div className="scene-content">
                     <div className="scene-topline">
                       <h3>{scene.title}</h3>
-                      <span><Clock3 size={13} /> {scene.duration}s</span>
+                      <span><Clock3 size={11} /> {scene.duration}s</span>
                     </div>
 
-                    {scene.character_action && (
-                      <span className="motion-badge">
-                        <Play size={10} fill="currentColor" /> {scene.character_action}
-                      </span>
-                    )}
-
                     <p>{scene.description}</p>
-
-                    {scene.motion_instruction && (
-                      <div className="scene-motion-instruction">
-                        <Sparkles size={13} />
-                        <span><strong>Camera & Dynamics:</strong> {scene.motion_instruction}</span>
-                      </div>
-                    )}
 
                     {scene.narration && (
                       <div className="scene-narration">
@@ -432,145 +681,42 @@ function App() {
                         <span>"{scene.narration}"</span>
                       </div>
                     )}
+
+                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "6px" }}>
+                      <span className="motion-badge">
+                        Choreography: {scene.motion_type.replace(/_/g, " ")}
+                      </span>
+                      <span className="motion-badge" style={{ color: "#38bdf8", borderColor: "#0369a1", background: "#0c4a6e33" }}>
+                        Camera: {scene.camera_motion.replace(/_/g, " ")}
+                      </span>
+                    </div>
                   </div>
-                </article>
+                </div>
               ))}
-
-              {/* Video Generation Trigger Bar */}
-              {videoStatus === "idle" && (
-                <div className="render-action-bar">
-                  <div className="bar-title">
-                    <h4><Video size={16} /> Ready to render complete video?</h4>
-                    <span className="beta-pill">{duration}s • {aspectRatio} • {storyboard.scenes.length} scenes</span>
-                  </div>
-                  <p>
-                    Renders an actual playable MP4 with dynamic subject sprites, parallax background layers, camera zoom/pan, particle fields, and synchronized narration.
-                  </p>
-                  <button type="button" className="btn-render-video" onClick={startRenderVideo}>
-                    <Play size={16} fill="currentColor" /> Render Full Video (.mp4)
-                  </button>
-                </div>
-              )}
-
-              {/* Rendering Progress Card */}
-              {videoStatus === "rendering" && (
-                <div className="progress-card">
-                  <div className="progress-header">
-                    <span>RENDERING MP4 VIDEO</span>
-                    <span>{videoProgress}%</span>
-                  </div>
-                  <div className="progress-bar-bg">
-                    <div className="progress-bar-fill" style={{ width: `${videoProgress}%` }} />
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div className="progress-stage">
-                      <LoaderCircle className="spin" size={14} /> {videoStage}
-                    </div>
-                    <button type="button" className="btn-cancel" onClick={cancelRender}>
-                      <StopCircle size={14} /> Cancel
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Cancelled State */}
-              {videoStatus === "cancelled" && (
-                <div className="notice error">
-                  Render was cancelled. You can adjust your settings and render again.
-                  <button type="button" className="btn-restart" style={{ marginLeft: "auto" }} onClick={startRenderVideo}>
-                    Restart
-                  </button>
-                </div>
-              )}
-
-              {/* Video Preview Player & Actions */}
-              {videoStatus === "ready" && videoUrl && (
-                <div className="video-preview-card">
-                  <div className="video-player-wrap">
-                    <video key={videoUrl} controls autoPlay playsInline src={videoUrl} />
-                  </div>
-
-                  {/* Engine Metadata Badges */}
-                  <div className="meta-badges">
-                    <span className="badge-engine">
-                      <Cpu size={13} /> {providerMeta?.name || "FrameFlow Procedural 2D Engine"}
-                    </span>
-                    <span className="badge-engine badge-success">
-                      <CheckCircle2 size={13} /> {duration}s MP4 Validated
-                    </span>
-                  </div>
-
-                  {providerMeta?.fallbackReason && (
-                    <div className="notice-fallback">
-                      <Info size={14} />
-                      <span>{providerMeta.fallbackReason}</span>
-                    </div>
-                  )}
-
-                  <div className="video-toolbar">
-                    <a
-                      className="btn-download-video"
-                      href={videoUrl}
-                      download={`frameflow_${style.toLowerCase()}_${duration}s.mp4`}
-                    >
-                      <Download size={15} /> Download Master MP4
-                    </a>
-                    <button type="button" className="btn-restart" onClick={startRenderVideo}>
-                      <RotateCcw size={13} /> Re-render Video
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Error Notice */}
-              {videoStatus === "failed" && (
-                <div className="notice error">
-                  {videoError}
-                  <button type="button" className="btn-restart" style={{ marginLeft: "auto" }} onClick={startRenderVideo}>
-                    Try Again
-                  </button>
-                </div>
-              )}
-
-              <div className="notice success"><Sparkles size={15} /> {storyboard.message}</div>
             </div>
           )}
 
-          {status === "error" && <EmptyState isError />}
-        </section>
+          {/* Empty State */}
+          {!storyboard && (
+            <div className="empty-state">
+              <div className="empty-orbit">
+                <Clapperboard size={26} />
+              </div>
+              <h3>Studio Awaiting Your Idea</h3>
+              <p>
+                Select Marathi, Hindi, or English, pick a prompt or write your own, and click <strong>Generate Storyboard</strong> to map out scenes and render your video.
+              </p>
+            </div>
+          )}
+        </div>
       </section>
 
       {/* Footer */}
       <footer>
-        <span>FrameFlow AI Studio</span>
-        <span>Universal Text-to-Animation • Scalable to 300s (5min)</span>
-        <span>Built with React + Vite & FastAPI + Python</span>
+        <span>FrameFlow AI Studio &bull; Marathi, Hindi & English Animation Engine</span>
+        <span>Runs locally on standard Windows hardware &bull; Free & Open-Source Pipeline</span>
       </footer>
     </main>
-  );
-}
-
-function EmptyState({ isError = false }) {
-  return (
-    <div className="empty-state">
-      <div className="empty-orbit"><Film size={25} /></div>
-      <h3>{isError ? "Your canvas is waiting" : "Your animation studio starts here"}</h3>
-      <p>
-        {isError
-          ? "Resolve the prompt or server connection issue, then generate again."
-          : "Type any prompt describing characters, vehicles, nature, animals, or actions to build a customized storyboard and video."}
-      </p>
-    </div>
-  );
-}
-
-function LoadingState() {
-  return (
-    <div className="empty-state loading-state">
-      <div className="empty-orbit"><LoaderCircle className="spin" size={25} /></div>
-      <h3>Analyzing prompt entities...</h3>
-      <p>Determining subjects, visual environment, motion dynamics, and camera choreography.</p>
-    </div>
   );
 }
 

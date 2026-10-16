@@ -2,6 +2,7 @@
 FrameFlow AI - Main FastAPI Application.
 Provides endpoints for:
 - Universal prompt-to-storyboard generation (5s to 300s)
+- Hindi (हिंदी), Marathi (मराठी), and English script generation
 - Background video rendering with cancellation support
 - Progress polling and provider metadata
 - Secure video streaming & download
@@ -10,28 +11,37 @@ Provides endpoints for:
 import asyncio
 import os
 import re
+import sys
 import uuid
 from typing import Any, Dict, List, Literal, Optional
+
+# Ensure project root is in sys.path for seamless execution from root or backend dir
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from backend.prompt_interpreter import compute_scenes_for_duration, detect_entity, detect_environment
+from backend.prompt_interpreter import compute_scenes_for_duration, detect_entity, detect_environment, detect_language
 from backend.video_generator import OUTPUT_DIR, render_video_job
 from backend.video_providers.manager import VideoProviderManager
 
 Style = Literal["Cinematic", "Cartoon", "Educational", "Story", "Nursery Rhyme", "Cyberpunk", "Fantasy"]
 AspectRatio = Literal["16:9", "9:16", "1:1"]
+Language = Literal["en", "hi", "mr"]
 EngineMode = Literal["auto", "procedural", "ai_video"]
+VoiceGender = Literal["female", "male"]
 
 
 class StoryboardRequest(BaseModel):
     prompt: str = Field(min_length=3, max_length=2000)
     style: Style = "Cinematic"
-    duration: int = Field(default=30, ge=5, le=300)
-    aspect_ratio: AspectRatio = "16:9"
+    duration: int = Field(default=15, ge=5, le=300)
+    aspect_ratio: AspectRatio = "9:16"
+    language: Language = "en"
     engine_mode: EngineMode = "auto"
 
 
@@ -52,6 +62,7 @@ class StoryboardResponse(BaseModel):
     style: Style
     duration: int
     aspect_ratio: AspectRatio
+    language: str
     engine_mode: EngineMode
     scenes: List[Scene]
     entity: Dict[str, Any]
@@ -62,8 +73,12 @@ class StoryboardResponse(BaseModel):
 class VideoRenderRequest(BaseModel):
     prompt: str = Field(min_length=3, max_length=2000)
     style: Style = "Cinematic"
-    duration: int = Field(default=30, ge=5, le=300)
-    aspect_ratio: AspectRatio = "16:9"
+    duration: int = Field(default=15, ge=5, le=300)
+    aspect_ratio: AspectRatio = "9:16"
+    language: Language = "en"
+    narration_enabled: bool = True
+    voice_gender: VoiceGender = "female"
+    show_subtitles: bool = True
     engine_mode: EngineMode = "auto"
     scenes: Optional[List[Scene]] = None
 
@@ -80,7 +95,7 @@ class VideoStatusResponse(BaseModel):
     error: Optional[str] = None
 
 
-app = FastAPI(title="FrameFlow AI API", version="2.0.0")
+app = FastAPI(title="FrameFlow AI API", version="2.5.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -96,9 +111,9 @@ jobs: Dict[str, dict] = {}
 cancelled_jobs: set[str] = set()
 
 
-def create_scenes_from_prompt(prompt: str, style: str, duration: int) -> List[Scene]:
-    """Generates prompt-specific scenes across any duration up to 300s."""
-    raw_scenes = compute_scenes_for_duration(prompt, style, duration)
+def create_scenes_from_prompt(prompt: str, style: str, duration: int, language: Optional[str] = None) -> List[Scene]:
+    """Generates prompt-specific scenes across any duration up to 300s in selected language."""
+    raw_scenes = compute_scenes_for_duration(prompt, style, duration, language)
     return [Scene(**s) for s in raw_scenes]
 
 
@@ -109,6 +124,10 @@ async def background_video_runner(
     aspect_ratio: str,
     duration: int,
     scenes: List[Scene],
+    language: str,
+    narration_enabled: bool,
+    voice_gender: str,
+    show_subtitles: bool,
     engine_mode: str,
 ):
     async def update_progress(pct: int, stage_msg: str):
@@ -131,6 +150,10 @@ async def background_video_runner(
             aspect_ratio=aspect_ratio,
             duration=duration,
             scenes=scenes,
+            language=language,
+            narration_enabled=narration_enabled,
+            voice_gender=voice_gender,
+            show_subtitles=show_subtitles,
             engine_mode=engine_mode,
             progress_callback=update_progress,
             is_cancelled_func=is_cancelled,
@@ -163,7 +186,7 @@ async def background_video_runner(
 
 @app.get("/api/health")
 def health() -> dict[str, str]:
-    return {"status": "ok", "version": "2.0.0"}
+    return {"status": "ok", "version": "2.5.0"}
 
 
 @app.get("/api/providers")
@@ -174,8 +197,9 @@ def get_providers():
 
 @app.post("/api/storyboard", response_model=StoryboardResponse)
 def create_storyboard(request: StoryboardRequest) -> StoryboardResponse:
-    scenes = create_scenes_from_prompt(request.prompt, request.style, request.duration)
-    entity = detect_entity(request.prompt)
+    detected_lang = detect_language(request.prompt, request.language)
+    scenes = create_scenes_from_prompt(request.prompt, request.style, request.duration, detected_lang)
+    entity = detect_entity(request.prompt, detected_lang)
     env = detect_environment(request.prompt)
 
     return StoryboardResponse(
@@ -183,20 +207,23 @@ def create_storyboard(request: StoryboardRequest) -> StoryboardResponse:
         style=request.style,
         duration=request.duration,
         aspect_ratio=request.aspect_ratio,
+        language=detected_lang,
         engine_mode=request.engine_mode,
         scenes=scenes,
         entity=entity,
         environment=env,
-        message=f"Storyboard generated with {len(scenes)} coherent narrative scenes ({request.duration}s total).",
+        message=f"Storyboard generated with {len(scenes)} narrative scenes ({request.duration}s total) in {detected_lang.upper()}.",
     )
 
 
 @app.post("/api/render-video")
 async def start_video_render(request: VideoRenderRequest, background_tasks: BackgroundTasks) -> dict:
+    detected_lang = detect_language(request.prompt, request.language)
     scenes = request.scenes or create_scenes_from_prompt(
         request.prompt,
         request.style,
         request.duration,
+        detected_lang,
     )
     job_id = str(uuid.uuid4())
     jobs[job_id] = {
@@ -219,12 +246,17 @@ async def start_video_render(request: VideoRenderRequest, background_tasks: Back
         aspect_ratio=request.aspect_ratio,
         duration=request.duration,
         scenes=scenes,
+        language=detected_lang,
+        narration_enabled=request.narration_enabled,
+        voice_gender=request.voice_gender,
+        show_subtitles=request.show_subtitles,
         engine_mode=request.engine_mode,
     )
 
     return {
         "job_id": job_id,
         "status": "queued",
+        "language": detected_lang,
         "scenes": [s.model_dump() for s in scenes],
     }
 
@@ -259,12 +291,11 @@ def cancel_video_job(job_id: str):
 
 @app.get("/api/video/{job_id}")
 def download_video(job_id: str):
-    # Security: validate job_id to prevent directory traversal
+    # Security: validate job_id format to prevent directory traversal
     if not re.match(r"^[a-zA-Z0-9_\-]+$", job_id):
         raise HTTPException(status_code=400, detail="Invalid job ID format")
 
     video_path = os.path.join(OUTPUT_DIR, f"{job_id}.mp4")
-    # Verify path is strictly inside OUTPUT_DIR
     real_path = os.path.realpath(video_path)
     real_dir = os.path.realpath(OUTPUT_DIR)
     if not real_path.startswith(real_dir):

@@ -1,11 +1,11 @@
 """
 FrameFlow AI - Video Generation Orchestrator.
 Orchestrates:
-- Text-to-speech audio synthesis (edge-tts with silent audio fallback)
+- Multilingual Text-to-speech audio synthesis (Hindi, Marathi, and English via edge-tts with silent audio fallback)
 - Sequential multi-scene rendering via VideoProviderManager
 - Memory-efficient streaming of frames to disk
 - Remuxing and FFmpeg concatenation with H.264 / AAC / faststart
-- Cancellation checks and progress polling
+- Cancellation checks and real progress reporting
 """
 
 import asyncio
@@ -16,40 +16,66 @@ import tempfile
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import imageio_ffmpeg
-from backend.prompt_interpreter import detect_entity, detect_environment
+from backend.prompt_interpreter import detect_entity, detect_environment, detect_language
 from backend.video_providers.manager import VideoProviderManager
 
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "generated_videos")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# Voice mappings by creative style
-VOICE_MAP = {
-    "Cinematic": "en-US-GuyNeural",
+# Multilingual Voice Mappings by Language and Gender
+VOICE_MAP: Dict[str, Dict[str, str]] = {
+    "hi": {
+        "female": "hi-IN-SwaraNeural",
+        "male": "hi-IN-MadhurNeural",
+    },
+    "mr": {
+        "female": "mr-IN-AarohiNeural",
+        "male": "mr-IN-ManoharNeural",
+    },
+    "en": {
+        "female": "en-IN-NeerjaNeural",
+        "male": "en-US-GuyNeural",
+    },
+}
+
+STYLE_VOICE_OVERRIDES: Dict[str, str] = {
     "Cartoon": "en-US-AnaNeural",
     "Educational": "en-US-ChristopherNeural",
-    "Story": "en-US-AriaNeural",
     "Nursery Rhyme": "en-US-JennyNeural",
 }
 
 
-async def generate_speech_audio(text: str, voice: str, output_path: str) -> float:
+def resolve_voice(language: str, voice_gender: str = "female", style: str = "Cinematic") -> str:
+    """Resolve the optimal verified Edge-TTS voice for the requested language & style."""
+    lang = language.lower() if language else "en"
+    gender = voice_gender.lower() if voice_gender in ["female", "male"] else "female"
+
+    if lang in VOICE_MAP:
+        return VOICE_MAP[lang].get(gender, VOICE_MAP[lang]["female"])
+
+    if style in STYLE_VOICE_OVERRIDES:
+        return STYLE_VOICE_OVERRIDES[style]
+
+    return "en-US-GuyNeural" if gender == "male" else "en-IN-NeerjaNeural"
+
+
+async def generate_speech_audio(text: str, voice: str, output_path: str, enabled: bool = True) -> float:
     """
     Synthesize narration audio using edge-tts.
-    If network or TTS fails, generates a silent track so video rendering never fails.
+    If narration is disabled or network fails, generates a silent track so video rendering never fails.
     Returns the exact audio duration in seconds.
     """
     text_clean = text.strip() if text else ""
     tts_succeeded = False
 
-    if text_clean:
+    if enabled and text_clean:
         try:
             import edge_tts
             communicate = edge_tts.Communicate(text_clean, voice)
             await asyncio.wait_for(communicate.save(output_path), timeout=15.0)
             if os.path.exists(output_path) and os.path.getsize(output_path) > 100:
                 tts_succeeded = True
-        except Exception as e:
-            # TTS is optional; log warning and create silent audio track
+        except Exception:
             pass
 
     ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
@@ -90,6 +116,10 @@ async def render_video_job(
     aspect_ratio: str,
     duration: int,
     scenes: list,
+    language: str = "en",
+    narration_enabled: bool = True,
+    voice_gender: str = "female",
+    show_subtitles: bool = True,
     engine_mode: str = "auto",
     fps: int = 15,
     progress_callback: Optional[Callable] = None,
@@ -97,16 +127,17 @@ async def render_video_job(
 ) -> Dict[str, Any]:
     """
     Renders the complete video sequence across arbitrary duration (up to 300s):
-    1. Synthesizes voiceover narration for all scenes
-    2. Sequentially renders visual scene clips to disk
+    1. Synthesizes voiceover narration for all scenes (Hindi / Marathi / English)
+    2. Sequentially renders visual scene clips to disk with procedural/AI engine
     3. Merges audio and video streams
     4. Stitches all scene clips into a single MP4 with FFmpeg
     """
     output_video_path = os.path.join(OUTPUT_DIR, f"{job_id}.mp4")
-    voice = VOICE_MAP.get(style, "en-US-GuyNeural")
+    lang = detect_language(prompt, language)
+    voice = resolve_voice(lang, voice_gender, style)
     provider_manager = VideoProviderManager()
 
-    entity = detect_entity(prompt)
+    entity = detect_entity(prompt, lang)
     env = detect_environment(prompt)
 
     total_scenes = len(scenes)
@@ -119,7 +150,8 @@ async def render_video_job(
 
         # Step 1: Synthesize voiceover audio for each scene
         if progress_callback:
-            await progress_callback(5, f"Synthesizing voiceover audio for {total_scenes} scenes...")
+            stage_narr = f"Synthesizing voiceover audio ({lang.upper()} - {voice})..." if narration_enabled else "Preparing audio tracks..."
+            await progress_callback(5, stage_narr)
 
         scene_audios: List[str] = []
         scene_durations: List[float] = []
@@ -133,11 +165,11 @@ async def render_video_job(
             if not narr_text:
                 narr_text = getattr(scene, "description", None) or (scene.get("description", "") if isinstance(scene, dict) else "")
 
-            audio_dur = await generate_speech_audio(narr_text, voice, audio_path)
+            audio_dur = await generate_speech_audio(narr_text, voice, audio_path, enabled=narration_enabled)
 
             # Target scene duration from storyboard or audio length
-            planned_dur = getattr(scene, "duration", None) or (scene.get("duration", 6) if isinstance(scene, dict) else 6)
-            effective_dur = max(float(planned_dur), audio_dur + 0.5, 3.0)
+            planned_dur = getattr(scene, "duration", None) or (scene.get("duration", 5) if isinstance(scene, dict) else 5)
+            effective_dur = max(float(planned_dur), audio_dur + 0.4 if narration_enabled else float(planned_dur), 2.5)
 
             scene_audios.append(audio_path)
             scene_durations.append(effective_dur)
@@ -149,6 +181,7 @@ async def render_video_job(
 
             scene_dur = scene_durations[idx]
             scene_dict = scene.model_dump() if hasattr(scene, "model_dump") else (scene if isinstance(scene, dict) else vars(scene))
+            scene_dict["show_subtitles"] = show_subtitles
 
             scene_raw_video = os.path.join(temp_dir, f"scene_{idx}_raw.mp4")
 
@@ -201,7 +234,7 @@ async def render_video_job(
 
         # Step 3: Concatenate scene clips with FFmpeg concat demuxer
         if progress_callback:
-            await progress_callback(88, "Stitching scene clips and finalizing MP4 container...")
+            await progress_callback(88, "Stitching scenes and finalizing master MP4 container...")
 
         concat_list_file = os.path.join(temp_dir, "concat_list.txt")
         with open(concat_list_file, "w", encoding="utf-8") as f:
@@ -233,4 +266,5 @@ async def render_video_job(
         "fallback_reason": overall_fallback_reason,
         "duration": sum(scene_durations),
         "scenes_count": total_scenes,
+        "language": lang,
     }
